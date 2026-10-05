@@ -47,9 +47,13 @@
   };
 
   # Passwords are written by Icicle after nixos-install and are never stored in
-  # this template. The normal NixOS sudo policy remains in force.
+  # this template. krisNCC deliberately uses non-interactive sudo for the small
+  # privileged surface, so the initial wheel policy must match that contract.
   users.mutableUsers = true;
-  security.sudo.enable = true;
+  security.sudo = {
+    enable = true;
+    wheelNeedsPassword = false;
+  };
 
 @AUTOLOGIN@
 

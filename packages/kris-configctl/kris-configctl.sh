@@ -1,11 +1,27 @@
 set -euo pipefail
 
 REPO="${KRISOS_CONFIG_REPO:-$HOME/krisNOS-config}"
-HOST="${KRISOS_HOST:-$(cut -d. -f1 </proc/sys/kernel/hostname)}"
+HOST="${KRISOS_HOST:-}"
+if [ -z "$HOST" ]; then
+  HOST="$(cut -d. -f1 </proc/sys/kernel/hostname)"
+  if [ ! -f "$REPO/hosts/$HOST/configuration.nix" ] && [ -d "$REPO/hosts" ]; then
+    candidate=""
+    count=0
+    for candidate_path in "$REPO"/hosts/*/configuration.nix; do
+      [ -f "$candidate_path" ] || continue
+      candidate="$(basename "$(dirname "$candidate_path")")"
+      count=$((count + 1))
+    done
+    if [ "$count" -eq 1 ]; then
+      HOST="$candidate"
+    fi
+  fi
+fi
 DEFAULT_REMOTE="${KRISOS_CONFIG_REMOTE:-https://github.com/krism-eu/krisNOS-config.git}"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/krisos"
 STATE_FILE="$STATE_DIR/config-sync.state"
 PENDING_LINK="$STATE_DIR/pending-system"
+SUDO=/run/wrappers/bin/sudo
 
 usage() {
   cat <<'USAGE'
@@ -28,7 +44,9 @@ Internal krisNCC commands:
 Environment:
   KRISOS_CONFIG_REPO     local working tree (default: ~/krisNOS-config)
   KRISOS_CONFIG_REMOTE   clone URL used by init (default: krism-eu/krisNOS-config)
-  KRISOS_HOST            NixOS flake host name (default: current short hostname)
+  KRISOS_HOST            NixOS flake host name (default: current hostname; if
+                         it does not match and the repo has exactly one host,
+                         that sole host is selected automatically)
   KRISOS_NONINTERACTIVE  when 1, network Git operations cannot prompt and time out
 
 Safety rules:
@@ -327,13 +345,13 @@ apply_config() (
   commit="$(printf '%s' "$plan" | jq -r .commit)"
   toplevel="$(printf '%s' "$plan" | jq -r .toplevel)"
 
-  need sudo
+  [ -x "$SUDO" ] || die "wrapper sudo NixOS non disponibile: $SUDO"
 
   activate_helper="$(command -v kris-system-activate || true)"
   [ -n "$activate_helper" ] && [ -x "$activate_helper" ] \
     || die "kris-system-activate non disponibile"
 
-  sudo -n -- "$activate_helper" "$toplevel"
+  "$SUDO" -n -- "$activate_helper" "$toplevel"
 
   record_applied "$commit" "$toplevel"
 

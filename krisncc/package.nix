@@ -10,7 +10,6 @@
   nix,
   util-linux,
   bluez,
-  sudo,
 }:
 
 let
@@ -44,7 +43,6 @@ stdenv.mkDerivation {
         nix
         util-linux
         bluez
-        sudo
         krisApp
         krisConfigctl
         krisRuntimectl

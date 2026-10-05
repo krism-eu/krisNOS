@@ -30,7 +30,12 @@ KrisNccBackend::KrisNccBackend(QObject *parent)
 
 bool KrisNccBackend::canCancel() const
 {
-    return m_activeUserProcess && m_activeUserProcess->state() != QProcess::NotRunning;
+    if (!m_activeUserProcess || m_activeUserProcess->state() == QProcess::NotRunning)
+        return false;
+
+    const QString operation = m_activeUserProcess->property("krisOperation").toString();
+    return operation != QStringLiteral("config-apply")
+        && operation != QStringLiteral("runtime-mutation");
 }
 
 void KrisNccBackend::setBusy(bool value)
@@ -141,7 +146,14 @@ void KrisNccBackend::terminateProcessGroup(QProcess *process, bool force)
 QProcess *KrisNccBackend::startCommand(const QString &program, const QStringList &arguments,
                                        const QString &operation, bool userOperation)
 {
-    const QString executable = QStandardPaths::findExecutable(program);
+    QString executable;
+    const QFileInfo programInfo(program);
+    if (programInfo.isAbsolute()) {
+        if (programInfo.exists() && programInfo.isExecutable())
+            executable = programInfo.absoluteFilePath();
+    } else {
+        executable = QStandardPaths::findExecutable(program);
+    }
     if (executable.isEmpty()) {
         setMessage(tr("Comando non disponibile: %1").arg(program));
         return nullptr;
@@ -152,6 +164,7 @@ QProcess *KrisNccBackend::startCommand(const QString &program, const QStringList
     }
 
     auto *process = new QProcess(this);
+    process->setProperty("krisOperation", operation);
 #ifdef Q_OS_UNIX
     process->setChildProcessModifier([] { ::setpgid(0, 0); });
 #endif
@@ -239,7 +252,7 @@ void KrisNccBackend::startRuntimeMutation(const QString &feature, bool enabled)
         return;
     }
 
-    startCommand(QStringLiteral("sudo"),
+    startCommand(QStringLiteral("/run/wrappers/bin/sudo"),
                  {QStringLiteral("-n"), QStringLiteral("--"), helper, feature,
                   enabled ? QStringLiteral("on") : QStringLiteral("off")},
                  QStringLiteral("runtime-mutation"), true);
@@ -545,9 +558,16 @@ void KrisNccBackend::refreshRuntimeStatus()
                   QStringLiteral("TYPE,SOFT,HARD"), QStringLiteral("list"),
                   QStringLiteral("bluetooth")},
                  QStringLiteral("bluetooth-status"));
-    startCommand(QStringLiteral("bluetoothctl"),
-                 {QStringLiteral("show")},
-                 QStringLiteral("bluez-status"));
+    QProcess *bluezProcess = startCommand(QStringLiteral("bluetoothctl"),
+                                          {QStringLiteral("show")},
+                                          QStringLiteral("bluez-status"));
+    if (bluezProcess) {
+        QPointer<QProcess> guardedProcess = bluezProcess;
+        QTimer::singleShot(5000, bluezProcess, [this, guardedProcess] {
+            if (guardedProcess && guardedProcess->state() != QProcess::NotRunning)
+                terminateProcessGroup(guardedProcess.data(), true);
+        });
+    }
 }
 
 void KrisNccBackend::setBluetoothEnabled(bool enabled)

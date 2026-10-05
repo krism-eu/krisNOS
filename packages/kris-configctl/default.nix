@@ -7,7 +7,6 @@
   coreutils,
   gnused,
   gawk,
-  sudo,
 }:
 let
   krisSystemActivate = callPackage ../kris-system-activate { };
@@ -21,7 +20,6 @@ writeShellApplication {
     coreutils
     gnused
     gawk
-    sudo
     krisSystemActivate
   ];
   text = builtins.readFile ./kris-configctl.sh;
