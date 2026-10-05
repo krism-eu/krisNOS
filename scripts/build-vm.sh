@@ -2,4 +2,4 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-exec nix build -L .#vm --show-trace
+exec nix build --no-update-lock-file -L .#vm --show-trace

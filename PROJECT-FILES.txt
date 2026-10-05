@@ -20,6 +20,12 @@
 ./docs/REPOSITORY-MODEL.md
 ./flake.lock
 ./flake.nix
+./installer/icicle/branding/krisnos/krisnos.svg
+./installer/icicle/branding/krisnos/slides.yml
+./installer/icicle/config.yml
+./installer/icicle/krisnos/configuration.nix
+./installer/icicle/krisnos/flake.nix
+./installer/icicle/krisnos.yml
 ./krisncc/CMakeLists.txt
 ./krisncc/README.md
 ./krisncc/org.krisncc.desktop
@@ -51,6 +57,7 @@
 ./packages/kris-runtimectl/kris-runtimectl.sh
 ./packages/kris-system-activate/default.nix
 ./packages/kris-system-activate/kris-system-activate.sh
+./profiles/icicle-installer.nix
 ./profiles/live.nix
 ./scripts/build-iso.sh
 ./scripts/build-vm.sh

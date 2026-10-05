@@ -3,12 +3,14 @@
 let
   configctl = pkgs.callPackage ../packages/kris-configctl { };
   krisApp = pkgs.callPackage ../packages/kris-app { };
+  krisNCC = pkgs.callPackage ../krisncc/package.nix { };
 in
 {
   # Componenti propri del sistema.
   environment.systemPackages = with pkgs; [
     configctl
     krisApp
+    krisNCC
 
     # Amministrazione locale essenziale.
     git

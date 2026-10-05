@@ -17,6 +17,7 @@
       pkgs = nixpkgs.legacyPackages.${system};
 
       krisosModule = import ./modules;
+      krisNCCPackage = pkgs.callPackage ./krisncc/package.nix { };
 
       # Generic live configuration. Icicle is included only in the live image;
       # the installed system is generated from installer/icicle templates and
@@ -39,11 +40,15 @@
         kris-runtimectl = pkgs.callPackage ./packages/kris-runtimectl { };
         kris-system-activate = pkgs.callPackage ./packages/kris-system-activate { };
         kris-configctl = pkgs.callPackage ./packages/kris-configctl { };
+        krisNCC = krisNCCPackage;
 
         # Heavy outputs are explicit packages, not flake checks.
         iso = liveSystem.config.system.build.images.iso-installer;
         vm = liveSystem.config.system.build.vm;
       };
+
+      # Keep the normal flake gate useful without pulling ISO/VM builds into it.
+      checks.${system}.krisncc-build = krisNCCPackage;
 
       formatter.${system} = pkgs.nixfmt;
     };

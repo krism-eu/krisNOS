@@ -49,6 +49,34 @@ La dipendenza è unidirezionale:
           v
        krisNOS
 
+## ISO e installazione con Icicle
+
+La ISO live usa l'immagine installer di NixOS e aggiunge **Icicle** come installer grafico.
+
+Icicle viene avviato dalla sessione live e gestisce direttamente le scelte d'installazione:
+
+- lingua
+- tastiera
+- fuso orario
+- nome utente e password
+- eventuale password root
+- hostname
+- disco intero oppure partizionamento manuale con GParted
+- riepilogo prima dell'installazione
+
+Non esiste un partizionatore o uno script d'installazione krisNOS parallelo.
+
+Durante l'installazione Icicle:
+
+1. prepara e monta le partizioni scelte;
+2. esegue `nixos-generate-config` sul computer reale;
+3. genera la configurazione finale dai template in `installer/icicle/`;
+4. installa tramite `nixos-install --flake`.
+
+Il sistema installato importa `krisNOS.nixosModules.krisos`; `hardware-configuration.nix` resta quello generato sul computer reale.
+
+L'integrazione usa una revisione Icicle bloccata in `flake.lock`. I comandi di controllo e build usano `--no-update-lock-file`: un lock mancante o incoerente deve quindi fallire, non essere modificato silenziosamente durante una build.
+
 ## Stato mutabile quotidiano
 
 Lo stato normale del desktop resta affidato al componente che lo gestisce nativamente:
@@ -74,7 +102,8 @@ Non esiste alcun overlay scrivibile generico sopra `/etc` o `/nix/store`.
 - `flake.lock`
 - `modules/`
 - `packages/`
-- `profiles/live.nix`
+- `profiles/`
+- `installer/icicle/`
 - `krisncc/`
 - `docs/`
 - `scripts/`
@@ -89,16 +118,27 @@ Il framework non contiene più una copia duplicata della configurazione personal
 
 ISO e VM sono output pesanti espliciti e non fanno parte dei normali controlli del flake.
 
-## Stato verificato
+## Gate prima di considerare finale la ISO Icicle
 
-- `nix flake check --no-build`: PASS
-- build krisNCC: PASS
-- runtime offscreen krisNCC: PASS
-- valutazione derivazione ISO: PASS
-- valutazione derivazione VM: PASS
-- build completa ISO: PASS
-- avvio VM: non ancora verificato
-- installazione fisica: non ancora verificata
+Eseguire:
+
+```bash
+./scripts/check.sh
+./scripts/build-iso.sh
+```
+
+Poi verificare almeno:
+
+- boot reale della ISO;
+- avvio automatico di Icicle nella sessione live;
+- percorso disco intero;
+- percorso di partizionamento manuale;
+- generazione di `hardware-configuration.nix`;
+- installazione e primo boot del sistema installato;
+- presenza di krisNCC nel sistema installato;
+- boot UEFI/systemd-boot e limite generazioni previsto.
+
+La precedente ISO senza Icicle non vale come verifica della nuova catena d'installazione.
 
 ## krisNCC
 
