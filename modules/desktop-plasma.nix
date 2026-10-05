@@ -30,20 +30,14 @@
     plasma-browser-integration
     plasma-workspace-wallpapers
 
-    konsole
     kwin-x11
     (lib.getBin qttools)
 
-    ark
     elisa
     gwenview
-    okular
-    kate
     khelpcenter
-    dolphin
     baloo-widgets
     dolphin-plugins
-    spectacle
     ffmpegthumbs
     krdp
 
@@ -51,7 +45,6 @@
     qtvirtualkeyboard
 
     qrca
-    discover
   ];
 
   # Applicazioni KDE che vogliamo garantire esplicitamente nella base.
