@@ -11,8 +11,9 @@ Uso:
   kris-runtimectl firewall on|off
   kris-runtimectl bluetooth on|off
 
-Solo lo stato generale del firewall viene persistito in
-/var/lib/krisos/runtime.conf.
+Solo la policy persistente del firewall viene salvata in
+/var/lib/krisos/runtime.conf. Il comando status riporta invece anche
+lo stato runtime reale di firewalld.
 
 Lo stato Bluetooth resta nativo rfkill/BlueZ e non viene salvato
 da kris-runtimectl.
@@ -76,10 +77,20 @@ unit_exists() {
   systemctl cat "$1" >/dev/null 2>&1
 }
 
+firewall_runtime_state() {
+  if ! unit_exists firewalld.service; then
+    printf 'unavailable\n'
+  elif systemctl is-active --quiet firewalld.service; then
+    printf 'on\n'
+  else
+    printf 'off\n'
+  fi
+}
+
 apply_firewall() {
   if ! unit_exists firewalld.service; then
     echo "kris-runtimectl: firewalld non disponibile" >&2
-    exit 69
+    return 69
   fi
 
   if [ "$(firewall_state)" = on ]; then
@@ -87,6 +98,18 @@ apply_firewall() {
   else
     systemctl stop firewalld.service
   fi
+}
+
+set_firewall() {
+  requested="$1"
+  previous="$(firewall_state)"
+
+  set_firewall_state "$requested"
+  apply_firewall || {
+    rc=$?
+    set_firewall_state "$previous"
+    return "$rc"
+  }
 }
 
 apply_bluetooth() {
@@ -109,11 +132,13 @@ apply_bluetooth() {
 }
 
 status_text() {
-  printf 'firewall=%s\n' "$(firewall_state)"
+  printf 'firewall=%s\n' "$(firewall_runtime_state)"
+  printf 'firewall_policy=%s\n' "$(firewall_state)"
 }
 
 status_json() {
-  printf '{"schema":1,"firewall":"%s"}\n' "$(firewall_state)"
+  printf '{"schema":2,"firewall":"%s","firewallPolicy":"%s"}\n' \
+    "$(firewall_runtime_state)" "$(firewall_state)"
 }
 
 cmd="${1:-}"
@@ -143,8 +168,7 @@ case "$cmd" in
     [ "$#" -eq 2 ] || { usage >&2; exit 2; }
 
     ensure_state
-    set_firewall_state "$2"
-    apply_firewall
+    set_firewall "$2"
     ;;
 
   bluetooth)

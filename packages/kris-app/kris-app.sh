@@ -25,6 +25,8 @@ Notes:
   - `run` uses `nix run`: it does not add the package to your profile.
   - Unfree packages need an explicit --unfree on `add`/`run`.
   - `remove` takes the element name shown by `kris-app list`.
+  - `upgrade --dry-run` is used only when the installed Nix exposes that
+    capability; otherwise it exits safely without changing the profile.
 USAGE
 }
 
@@ -108,7 +110,14 @@ case "$cmd" in
     done
 
     if [ "$dry_run" -eq 1 ]; then
-      set -- --all --dry-run
+      upgrade_help="$(nix profile upgrade --help 2>&1 || true)"
+      case "$upgrade_help" in
+        *--dry-run*) set -- --all --dry-run ;;
+        *)
+          echo "kris-app: questa versione di Nix non supporta un'anteprima sicura di 'profile upgrade'; nessuna modifica eseguita" >&2
+          exit 69
+          ;;
+      esac
     else
       set -- --all
     fi
