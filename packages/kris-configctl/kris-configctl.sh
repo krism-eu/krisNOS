@@ -3,13 +3,14 @@ set -euo pipefail
 
 REPO="${KRISOS_CONFIG_REPO:-$HOME/krisNOS-config}"
 HOST="${KRISOS_HOST:-$(hostname -s)}"
+DEFAULT_REMOTE="${KRISOS_CONFIG_REMOTE:-https://github.com/krism-eu/krisNOS-config.git}"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/krisos"
 STATE_FILE="$STATE_DIR/config-sync.state"
 
 usage() {
   cat <<'USAGE'
 Usage:
-  kris-configctl init <git-url>
+  kris-configctl init [git-url]
   kris-configctl status [--json]
   kris-configctl fetch
   kris-configctl pull
@@ -20,10 +21,12 @@ Usage:
   kris-configctl apply
 
 Environment:
-  KRISOS_CONFIG_REPO   local working tree (default: ~/krisNOS-config)
-  KRISOS_HOST          NixOS flake host name (default: current short hostname)
+  KRISOS_CONFIG_REPO     local working tree (default: ~/krisNOS-config)
+  KRISOS_CONFIG_REMOTE   clone URL used by init (default: krism-eu/krisNOS-config)
+  KRISOS_HOST            NixOS flake host name (default: current short hostname)
 
 Safety rules:
+- synchronization is never automatic;
 - never force-pushes;
 - never auto-merges diverged histories;
 - never overwrites a dirty working tree;
@@ -182,10 +185,10 @@ apply_config() {
 cmd="${1:-}"
 case "$cmd" in
   init)
-    [ "$#" -eq 2 ] || { usage >&2; exit 2; }
+    [ "$#" -le 2 ] || { usage >&2; exit 2; }
     need git
     [ ! -e "$REPO" ] || die "destinazione già esistente: $REPO"
-    git clone -- "$2" "$REPO"
+    git clone -- "${2:-$DEFAULT_REMOTE}" "$REPO"
     ;;
   status)
     [ "$#" -le 2 ] || { usage >&2; exit 2; }
