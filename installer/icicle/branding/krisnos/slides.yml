@@ -1,0 +1,11 @@
+---
+slides:
+- title: "krisNOS"
+  subtitle: "NixOS, Plasma 6 e una base riproducibile senza toglierti il controllo del sistema."
+  image: krisnos.svg
+- title: "Installazione nelle tue mani"
+  subtitle: "Scegli utente, hostname, lingua, tastiera, fuso orario, disco e partizionamento."
+  image: krisnos.svg
+- title: "Configurazione riproducibile"
+  subtitle: "L'hardware viene rilevato sul computer reale e il sistema installato importa il framework krisNOS."
+  image: krisnos.svg
