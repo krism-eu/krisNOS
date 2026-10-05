@@ -44,7 +44,6 @@
   # La ISO krisNOS non porta il manuale NixOS locale nel menu.
   documentation.nixos.enable = lib.mkForce false;
 
-
   # Solo per system.build.vm: consente i test del guest dal terminale host.
   # Non modifica né la configurazione installata né l'ISO.
   virtualisation.vmVariant = {
