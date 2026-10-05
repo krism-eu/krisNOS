@@ -17,6 +17,7 @@ let
         --replace-fail 'services.xserver.displayManager.autoLogin.enable' 'services.displayManager.autoLogin.enable' \
         --replace-fail 'services.xserver.displayManager.autoLogin.user' 'services.displayManager.autoLogin.user' \
         --replace-fail 'services.xserver.layout' 'services.xserver.xkb.layout' \
+        --replace-fail '    layout = "{}";' '    xkb.layout = "{}";' \
         --replace-fail 'xkbVariant =' 'xkb.variant ='
     '';
   });
