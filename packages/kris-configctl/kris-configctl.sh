@@ -149,7 +149,7 @@ status_json() {
       behind: $behind,
       host: $host,
       appliedCommit: $appliedCommit,
-      appliedToplevel: $applied_toplevel,
+      appliedToplevel: $appliedToplevel,
       appliedAt: $appliedAt,
       currentToplevel: $currentToplevel
     }'
