@@ -1,0 +1,10 @@
+# REPLACE THIS FILE with the output generated on the real machine:
+#   sudo nixos-generate-config --show-hardware-config > hardware-configuration.nix
+#
+# Do not copy filesystem UUIDs from an example.
+{ lib, modulesPath, ... }:
+{
+  boot.initrd.availableKernelModules = [ "nvme" "xhci_pci" "ahci" "usb_storage" "sd_mod" ];
+  boot.kernelModules = [ "kvm-amd" ];
+  nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
+}

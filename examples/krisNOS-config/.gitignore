@@ -1,0 +1,8 @@
+result
+result-*
+.direnv/
+.env
+*.key
+*.pem
+secrets.nix
+secrets/
