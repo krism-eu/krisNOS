@@ -1,4 +1,10 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
+
 {
   networking.hostName = config.krisos.hostName;
 
@@ -9,17 +15,18 @@
   console.keyMap = lib.mkDefault "it2";
 
   nix.settings = {
-    experimental-features = [ "nix-command" "flakes" ];
+    experimental-features = [
+      "nix-command"
+      "flakes"
+    ];
     auto-optimise-store = true;
     warn-dirty = false;
   };
 
-  nix.registry.nixpkgs.to = {
-    type = "github";
-    owner = "NixOS";
-    repo = "nixpkgs";
-    ref = "nixos-26.05";
-  };
+  # NixOS upstream adds perl/rsync/strace as convenience defaults. They are
+  # not part of the krisNOS foundation; install them in the user profile when
+  # actually needed. Keep environment.corePackages untouched.
+  environment.defaultPackages = lib.mkDefault [ ];
 
   # Explicit/manual until krisNCC owns a visible retention policy.
   nix.gc.automatic = lib.mkDefault false;
@@ -33,8 +40,12 @@
   zramSwap.memoryPercent = lib.mkDefault 25;
 
   services.fstrim.enable = true;
+  boot.zfs.forceImportRoot = false;
 
+  # Polkit remains available for normal desktop integrations. krisNCC itself
+  # uses the host's explicit sudo policy for its fixed administrative helpers.
   security.polkit.enable = true;
+
   security.rtkit.enable = true;
 
   services.dbus.enable = true;

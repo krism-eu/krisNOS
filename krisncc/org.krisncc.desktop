@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=krisNCC
+Comment=Centro di controllo di krisNOS
+Exec=krisNCC
+Icon=preferences-system
+Terminal=false
+Categories=System;Settings;
+StartupNotify=true

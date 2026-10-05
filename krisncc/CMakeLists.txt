@@ -3,7 +3,6 @@ project(krisNCC VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_AUTOMOC ON)
 include(GNUInstallDirs)
 
 find_package(Qt6 6.7 REQUIRED COMPONENTS Core Gui Qml Quick)
@@ -45,3 +44,4 @@ target_link_libraries(krisNCC PRIVATE
 
 target_compile_definitions(krisNCC PRIVATE KRISNCC_VERSION="${PROJECT_VERSION}")
 install(TARGETS krisNCC RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(FILES org.krisncc.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)

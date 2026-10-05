@@ -1,8 +1,11 @@
 #pragma once
 
 #include <QObject>
+#include <QPointer>
 #include <QVariantList>
 #include <QVariantMap>
+
+class QProcess;
 
 class KrisNccBackend final : public QObject
 {
@@ -19,6 +22,7 @@ class KrisNccBackend final : public QObject
     Q_PROPERTY(QStringList systemGenerations READ systemGenerations NOTIFY recoveryChanged)
     Q_PROPERTY(QStringList profileHistory READ profileHistory NOTIFY recoveryChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
+    Q_PROPERTY(bool canCancel READ canCancel NOTIFY busyChanged)
     Q_PROPERTY(QString lastMessage READ lastMessage NOTIFY lastMessageChanged)
 
 public:
@@ -36,6 +40,7 @@ public:
     QStringList systemGenerations() const { return m_systemGenerations; }
     QStringList profileHistory() const { return m_profileHistory; }
     bool busy() const { return m_busy; }
+    bool canCancel() const;
     QString lastMessage() const { return m_lastMessage; }
 
     Q_INVOKABLE void refreshResources();
@@ -45,18 +50,20 @@ public:
     Q_INVOKABLE void syncConfig();
     Q_INVOKABLE void validateConfig();
     Q_INVOKABLE void buildConfig();
+    Q_INVOKABLE void applyConfig();
     Q_INVOKABLE void refreshRuntimeStatus();
     Q_INVOKABLE void setBluetoothEnabled(bool enabled);
     Q_INVOKABLE void setFirewallEnabled(bool enabled);
     Q_INVOKABLE void refreshSoftware();
     Q_INVOKABLE void searchSoftware(const QString &query);
     Q_INVOKABLE void addSoftware(const QString &attribute, bool allowUnfree = false);
-    Q_INVOKABLE void runSoftware(const QString &attribute);
+    Q_INVOKABLE void runSoftware(const QString &attribute, bool allowUnfree = false);
     Q_INVOKABLE void removeSoftware(const QString &name);
-    Q_INVOKABLE void previewSoftwareUpdates();
+    Q_INVOKABLE void previewSoftwareUpdates(bool allowUnfree = false);
     Q_INVOKABLE void refreshDistroboxes();
     Q_INVOKABLE void refreshRecovery();
-    Q_INVOKABLE bool launchTool(const QString &toolId) const;
+    Q_INVOKABLE bool launchTool(const QString &toolId);
+    Q_INVOKABLE void cancelCurrentOperation();
 
 signals:
     void resourcesChanged();
@@ -71,11 +78,13 @@ signals:
     void lastMessageChanged();
 
 private:
-    void startCommand(const QString &program, const QStringList &arguments,
-                      const QString &operation, bool userOperation = false);
+    QProcess *startCommand(const QString &program, const QStringList &arguments,
+                           const QString &operation, bool userOperation = false);
     void startRuntimeMutation(const QString &feature, bool enabled);
     void handleCommandResult(const QString &operation, int exitCode,
                              const QByteArray &out, const QByteArray &err);
+    void updateBluetoothState();
+    void terminateProcessGroup(QProcess *process, bool force = false);
     void setBusy(bool value);
     void setMessage(const QString &message);
     static QString nixAttributeFromSearchKey(const QString &key);
@@ -93,6 +102,13 @@ private:
     QStringList m_systemGenerations;
     QStringList m_profileHistory;
     quint64 m_searchSerial = 0;
+    QString m_searchQuery;
+    QString m_rfkillBluetoothState = QStringLiteral("unknown");
+    QString m_bluezBluetoothState = QStringLiteral("unknown");
     bool m_busy = false;
     QString m_lastMessage;
+
+    QPointer<QProcess> m_activeUserProcess;
+    QPointer<QProcess> m_cancelledProcess;
+    QPointer<QProcess> m_searchProcess;
 };

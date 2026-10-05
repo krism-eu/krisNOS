@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 {
   services.displayManager.sddm = {
     enable = true;
@@ -10,30 +15,67 @@
     user = config.krisos.userName;
   };
 
-  services.desktopManager.plasma6.enable = true;
+  services.desktopManager.plasma6 = {
+    enable = true;
+    enableQt5Integration = false;
+  };
 
-  # Graphical keyboard layout. This option is also consumed by Wayland desktop
-  # integrations; enabling it does not switch the Plasma session to Xorg.
   services.xserver.xkb.layout = "it";
 
-  # Plasma's NixOS module already supplies XWayland and the KDE portal.
-  # Keep the key desktop applications explicit so our UX does not depend on
-  # future changes to Plasma's optional default package set.
-  environment.systemPackages = with pkgs; [
-    kdePackages.dolphin
-    kdePackages.konsole
-    kdePackages.kate
-    kdePackages.ark
-    kdePackages.okular
-    kdePackages.spectacle
+  # Manteniamo tutto il core Plasma richiesto da NixOS.
+  # Escludiamo solo applicazioni/funzionalita opzionali che non vogliamo
+  # nella base.
+  environment.plasma6.excludePackages = with pkgs.kdePackages; [
+    aurorae
+    plasma-browser-integration
+    plasma-workspace-wallpapers
+
+    konsole
+    kwin-x11
+    (lib.getBin qttools)
+
+    ark
+    elisa
+    gwenview
+    okular
+    kate
+    khelpcenter
+    dolphin
+    baloo-widgets
+    dolphin-plugins
+    spectacle
+    ffmpegthumbs
+    krdp
+
+    plasma-keyboard
+    qtvirtualkeyboard
+
+    qrca
+    discover
   ];
 
-  # Use the NixOS integration rather than merely adding the package: this also
-  # wires the service integration expected by KDE Connect.
-  programs.kdeconnect.enable = true;
+  # Applicazioni KDE che vogliamo garantire esplicitamente nella base.
+  environment.systemPackages = with pkgs.kdePackages; [
+    dolphin
+    konsole
+    kate
+    ark
+    okular
+    spectacle
+    discover
+  ];
 
-  fonts.packages = with pkgs; [
-    noto-fonts
-    noto-fonts-emoji
+  # KDE Connect verra installato manualmente fuori dalla base.
+  programs.kdeconnect.enable = false;
+
+  programs.kde-pim.enable = false;
+  services.fwupd.enable = false;
+  services.geoclue2.enable = false;
+  services.orca.enable = false;
+
+  # ktexteditor, kconfig e qtbase NON vengono esclusi:
+  # servono alle integrazioni desktop/Kate/xdg.
+  fonts.packages = [
+    pkgs.noto-fonts-color-emoji
   ];
 }

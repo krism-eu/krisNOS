@@ -6,9 +6,9 @@ Usage:
   kris-app search [--json] <text>
   kris-app add [--unfree] <nixpkgs-attribute>
   kris-app run [--unfree] <nixpkgs-attribute>
-  kris-app remove <profile-element-name>
+  kris-app remove <element-name>
   kris-app list [--json]
-  kris-app upgrade [--dry-run]
+  kris-app upgrade [--unfree] [--dry-run]
   kris-app history
   kris-app rollback
 
@@ -79,8 +79,12 @@ case "$cmd" in
   remove)
     [ "$#" -eq 2 ] || { usage >&2; exit 2; }
     valid_attr "$2" || { echo "kris-app: nome elemento non valido" >&2; exit 2; }
-    case "$2" in (*[!0-9]*) ;; (*) echo "kris-app: indici non supportati, usa il nome (kris-app list)" >&2; exit 2 ;; esac
-    exec nix profile remove "$2"
+    case "$2" in
+      -*) echo "kris-app: opzioni non ammesse come nome elemento" >&2; exit 2 ;;
+      (*[!0-9]*) ;;
+      (*) echo "kris-app: indici non supportati, usa il nome elemento" >&2; exit 2 ;;
+    esac
+    exec nix profile remove -- "$2"
     ;;
   list)
     if [ "${2:-}" = "--json" ]; then
@@ -91,13 +95,30 @@ case "$cmd" in
     exec nix profile list
     ;;
   upgrade)
-    export NIXPKGS_ALLOW_UNFREE=1
-    if [ "${2:-}" = "--dry-run" ]; then
-      [ "$#" -eq 2 ] || { usage >&2; exit 2; }
-      exec nix profile upgrade --impure --all --dry-run
+    shift
+    dry_run=0
+    unfree=0
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --dry-run) dry_run=1 ;;
+        --unfree) unfree=1 ;;
+        *) usage >&2; exit 2 ;;
+      esac
+      shift
+    done
+
+    if [ "$dry_run" -eq 1 ]; then
+      set -- --all --dry-run
+    else
+      set -- --all
     fi
-    [ "$#" -eq 1 ] || { usage >&2; exit 2; }
-    exec nix profile upgrade --impure --all
+
+    if [ "$unfree" -eq 1 ]; then
+      export NIXPKGS_ALLOW_UNFREE=1
+      exec nix profile upgrade --impure "$@"
+    fi
+
+    exec nix profile upgrade "$@"
     ;;
   history)
     [ "$#" -eq 1 ] || { usage >&2; exit 2; }

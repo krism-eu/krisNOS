@@ -1,41 +1,77 @@
-# Next integration pass
+# Prossimi interventi
 
-When the previous personal NixOS configuration is available:
+Questo documento contiene soltanto attività ancora realmente aperte.
 
-- diff it module-by-module against this scaffold
-- import only hardware/boot choices that still make sense
-- identify packages that should move from `environment.systemPackages` to the personal profile
-- identify service settings that can become runtime state instead of Nix state
-- verify Topton FU02 hardware configuration and filesystem layout
-- decide installation path and whether to retain Calamares or use the native NixOS installer flow
-- package or port krisNCC to Qt/Kirigami on NixOS
-- add JSON contracts and focused tests for `kris-app` and `kris-runtimectl`
-- run a real `nix flake check`, VM boot, then ISO boot before touching the physical installation
+## P1 - Prima della VM e dell'installazione
 
-## Known item to verify before first install
+- verificare in VM il modello iniziale account: `kris` senza password, autologin, `sudo -n` funzionante come wheel passwordless e password root separata impostata localmente;
+- testare firewall/Bluetooth ON/OFF e Config -> Applica tramite gli helper fissi;
+- testare realmente `ExecCondition` per lo stato persistente generale del firewall;
+- verificare il comportamento del reverse path filter di firewalld nella revisione NixOS 26.05 utilizzata;
+- avviare la VM generata e verificare Plasma, SDDM e sessione utente;
+- avviare la ISO generata;
+- aggiungere il vero `hardware-configuration.nix` a `krisNOS-config`;
+- generare/committare il `flake.lock` definitivo di `krisNOS-config` dopo la revisione del framework;
+- validare la configurazione reale dell'host `krisnos`;
+- testare Config -> Applica: build utente, GC root temporaneo, switch root, registrazione commit+toplevel e stato corretto dopo rollback;
+- verificare systemd-boot con `krisos.bootEntryLimit = 5`: numero di configurazioni visibili, default corrente e rollback; tenere separata la retention delle generazioni Nix sul disco;
+- eseguire audit e hardening kernel/sysctl prima dell'installazione definitiva (ASLR, ptrace/Yama, dmesg/kptr, BPF, perf, moduli, lockdown e user namespaces), senza rompere AMD/Wayland/audio/Flatpak/Distrobox.
 
-- Re-test the NixOS 26.05 firewalld backend reverse-path-filter handling. A 2026 upstream issue reports swapped strict/loose `rp_filter` values. Do not call the firewall layer final until the pinned revision is checked or locally corrected.
+## Backend krisNCC
 
-## Review points completed through v0.4
+### Sistema
 
-- graphical Italian keyboard layout is explicit;
-- systemd-boot entries are capped (default 5);
-- `system.stateVersion` is host/profile-owned, not buried in the reusable core module;
-- automatic GC is disabled until krisNCC owns an explicit, understandable retention policy;
-- the custom PRINTING toggle and boot apply service were removed: CUPS owns printing state, reducing custom synchronization.
+- NetworkManager / VPN
+- Bluetooth: solo ON/OFF affidabile, nessuna priorità a pairing/dispositivi avanzati
+- PipeWire / WirePlumber
+- CUPS
+- firewalld
+- profili energetici
+- servizi systemd e log selettivi con caricamento lazy
 
-## Review points still open
+### App
 
-- Verify whether `noto-fonts-emoji` (now `noto-fonts-color-emoji`) and `nixfmt-rfc-style` (now `nixfmt`) are still accepted aliases in the pinned 26.05; `check.sh` runs `nix fmt -- --check`, so run `nix fmt` once first.
-- `iso-installer` is a text installer image with this configuration on top; decide whether to move to a Calamares/Plasma live image.
-- Verify first on real Nix: the `ExecCondition` guard on firewalld, and the Flatpak/Podman first-run flow (no Flathub remote is added yet).
+- rifinire ricerca, installazione, aggiornamento e pacchetti unfree Nix
+- backend Flatpak reale
+- Distrobox: crea, entra, aggiorna e rimuovi
 
+### Config
 
-## v0.4 next design work
+- opzioni Nix controllate da krisNCC
+- anteprima e diff
+- validazione e build
+- Applica tramite helper fisso e `sudo -n` nella policy passwordless iniziale dell'host
+- sincronizzazione Git manuale e separata da Applica
 
-- classify additional quick system settings (hostname, timezone/locale, startup policies) into foundation/native/Kris-policy;
-- define read/write JSON contracts for NetworkManager, BlueZ, CUPS, PipeWire/WirePlumber and power profiles;
-- decide which portable, non-secret preferences can be exported into `krisNOS-config`;
-- keep credentials and native runtime databases local;
-- integrate `kris-configctl` into a future krisNCC Config/Sync page;
-- create the actual GitHub repositories only after the local layout and first Nix VM test are accepted.
+### Ripristino
+
+- generazioni sistema
+- generazioni profilo utente
+- rollback
+- pulizia e retention esplicite
+
+### Strumenti
+
+- fino a 12 comandi personali
+- launcher
+- diagnostica
+- collegamento al backup esterno
+
+## Pulizia repository ancora da verificare
+
+- mantenere tutta la configurazione specifica della macchina esclusivamente in `krisNOS-config`;
+- mantenere gli strumenti Podman usati per lo sviluppo fuori dal repository del framework.
+
+## Gate finale
+
+1. revisione sorgenti e diff
+2. `nix flake check`
+3. build krisNCC
+4. test runtime krisNCC
+5. valutazione krisNOS-config
+6. audit/hardening kernel con test compatibilità
+7. build e avvio VM
+8. build e avvio ISO
+9. test azioni privilegiate, boot entries e rollback
+10. test hardware reale
+11. commit raggruppati e push

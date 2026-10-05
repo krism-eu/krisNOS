@@ -51,7 +51,7 @@ kris-configctl init
 
 The default remote is `https://github.com/krism-eu/krisNOS-config.git`; it can be overridden with an explicit URL or `KRISOS_CONFIG_REMOTE`.
 
-The checkout is user-owned. Root is used only for the final NixOS build/switch.
+The checkout, evaluation and build are user-owned and unprivileged. Privilege is used only to register the final system generation and activate it.
 
 ## Safe sync state machine
 
@@ -83,11 +83,13 @@ local checkout
   ↓ fast-forward only
 Nix evaluation
   ↓
-NixOS build
+NixOS build as normal user
   ↓
 explicit Apply
   ↓
-nixos-rebuild switch
+set /nix/var/nix/profiles/system
+  ↓
+switch-to-configuration switch
   ↓
 record deployed Git commit
 ```

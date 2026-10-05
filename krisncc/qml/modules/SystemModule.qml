@@ -31,8 +31,28 @@ Kirigami.ScrollablePage {
             Kirigami.AbstractCard {
                 contentItem: RowLayout {
                     Kirigami.Icon { source: "preferences-system-bluetooth"; Layout.preferredWidth: 32; Layout.preferredHeight: 32 }
-                    ColumnLayout { Layout.fillWidth: true; Controls.Label { text: qsTr("Bluetooth"); font.bold: true } Controls.Label { text: qsTr("BlueZ"); opacity: 0.72 } }
-                    Controls.Switch { checked: KrisBackend.runtimeStatus.bluetooth === "on"; enabled: !KrisBackend.busy; onToggled: KrisBackend.setBluetoothEnabled(checked) }
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Controls.Label {
+                            text: qsTr("Bluetooth")
+                            font.bold: true
+                        }
+                        Controls.Label {
+                            text: qsTr("BlueZ")
+                            opacity: 0.72
+                        }
+                        Controls.Label {
+                            text: qsTr("Al riavvio torna spento")
+                            opacity: 0.60
+                        }
+                    }
+                    Controls.Switch {
+                        checked: KrisBackend.runtimeStatus.bluetooth === "on"
+                        enabled: !KrisBackend.busy
+                            && KrisBackend.runtimeStatus.bluetooth !== "hard-blocked"
+                            && KrisBackend.runtimeStatus.bluetooth !== "unavailable"
+                        onToggled: KrisBackend.setBluetoothEnabled(checked)
+                    }
                 }
             }
 

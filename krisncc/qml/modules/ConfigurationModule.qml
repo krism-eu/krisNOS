@@ -42,15 +42,19 @@ Kirigami.ScrollablePage {
             Controls.Button { text: qsTr("Sincronizza"); enabled: !KrisBackend.busy; onClicked: KrisBackend.syncConfig() }
         }
 
-        Controls.TextArea {
+        Controls.ScrollView {
             Layout.fillWidth: true
-            Layout.preferredHeight: visible ? Math.min(320, implicitHeight + 24) : 0
+            Layout.preferredHeight: visible ? 320 : 0
             visible: KrisBackend.configDiff.length > 0
-            readOnly: true
-            wrapMode: TextEdit.NoWrap
-            text: KrisBackend.configDiff
-            font.family: "monospace"
-            selectByMouse: true
+            clip: true
+
+            Controls.TextArea {
+                readOnly: true
+                wrapMode: TextEdit.NoWrap
+                text: KrisBackend.configDiff
+                font.family: "monospace"
+                selectByMouse: true
+            }
         }
 
         Kirigami.AbstractCard {
@@ -80,9 +84,10 @@ Kirigami.ScrollablePage {
             Controls.Button { text: qsTr("Costruisci"); enabled: !KrisBackend.busy; onClicked: KrisBackend.buildConfig() }
             Controls.Button {
                 text: qsTr("Applica")
-                enabled: false
+                enabled: !KrisBackend.busy
+                onClicked: KrisBackend.applyConfig()
                 Controls.ToolTip.visible: hovered
-                Controls.ToolTip.text: qsTr("Sarà abilitato solo con il percorso Polkit ristretto, senza sudo nascosto nella GUI.")
+                Controls.ToolTip.text: qsTr("Valida e costruisce da utente; solo l'attivazione finale usa l'helper amministrativo fisso tramite sudo non interattivo.")
             }
             Item { Layout.fillWidth: true }
             Controls.Label { text: qsTr("Sync ≠ Applica"); font.bold: true; opacity: 0.75 }

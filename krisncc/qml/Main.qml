@@ -130,8 +130,19 @@ Kirigami.ApplicationWindow {
         id: busyDialog
         modal: true
         anchors.centerIn: parent
+        implicitWidth: 500
         title: qsTr("Operazione in corso")
-        standardButtons: Controls.Dialog.Close
-        contentItem: Controls.Label { text: qsTr("krisNCC non viene chiuso durante una modifica avviata dall'utente."); wrapMode: Text.WordWrap }
+        standardButtons: KrisBackend.canCancel ? Controls.Dialog.Cancel : Controls.Dialog.Close
+        onRejected: {
+            if (KrisBackend.canCancel)
+                KrisBackend.cancelCurrentOperation()
+        }
+        contentItem: Controls.Label {
+            width: 440
+            text: KrisBackend.canCancel
+                ? qsTr("L'operazione può essere annullata. krisNCC resterà aperto finché il processo non termina.")
+                : qsTr("Questa modifica non può essere interrotta in sicurezza. krisNCC resterà aperto fino al completamento.")
+            wrapMode: Text.WordWrap
+        }
     }
 }

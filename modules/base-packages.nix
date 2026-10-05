@@ -1,23 +1,31 @@
-{ config, pkgs, ... }:
+{ pkgs, ... }:
+
 let
   configctl = pkgs.callPackage ../packages/kris-configctl { };
   krisApp = pkgs.callPackage ../packages/kris-app { };
-  krisRuntimectl = pkgs.callPackage ../packages/kris-runtimectl { };
 in
 {
-  # Keep this deliberately short. Normal desktop applications belong to the
-  # user Nix profile (or Flatpak), not environment.systemPackages.
+  # Componenti propri del sistema.
   environment.systemPackages = with pkgs; [
     configctl
     krisApp
-    krisRuntimectl
+
+    # Amministrazione locale essenziale.
     git
     curl
-    wget
-    jq
-    ripgrep
+    nano
+    rsync
+    unzip
+
+    # Rete.
+    iproute2
+    iputils
+    ethtool
+
+    # Diagnostica hardware/storage.
     pciutils
     usbutils
-    lm_sensors
+    smartmontools
+    nvme-cli
   ];
 }

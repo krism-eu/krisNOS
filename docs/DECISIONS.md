@@ -1,27 +1,35 @@
-# Initial decisions
+# Decisioni architetturali attuali
 
-1. Base: upstream NixOS 26.05, not a deep Xinux/SnowflakeOS fork.
-2. Xinux/SnowflakeOS are references for UX, ISO layout and graphical software management.
-3. No dependency on deprecated `nixos-generators`; use native NixOS image builders.
-4. Flake is a build/pinning wrapper. NixOS modules themselves contain no flake-specific arguments and remain reusable by a traditional `configuration.nix`.
-5. No Home Manager requirement.
-6. No generic writable overlay over `/etc` or `/nix/store`.
-7. Applications go to the user's Nix profile by default.
-8. System daemons needed for desktop integration are declared once in the base, then manipulated through their runtime APIs/state.
-9. No SSH server by default.
-10. Plasma 6 Wayland is primary; XWayland remains available for compatibility.
-11. Base package list remains intentionally small.
-12. Git hosting/CI is optional: local `nix flake check`, VM and ISO builds are first-class.
-13. Firewalld is used through the supported NixOS backend for now because it preserves NixOS service integrations while exposing firewalld's runtime API; its known 26.05 reverse-path-filter issue is an explicit pre-install verification item.
-14. `hardware-configuration.nix` is tracked in Git (not ignored): flakes cannot see ignored/untracked files. `krisos-topton` and its check are exposed only when the file exists.
-15. Live profile: autologin + throwaway password + passwordless sudo, live/VM only.
-16. Kris-owned persistent runtime state is intentionally tiny: `runtime.conf` persists only `FIREWALL`. Printing remains native CUPS state; Bluetooth remains rfkill/BlueZ state.
-17. `kris-runtimectl` owns the firewall state default (fail-safe `on`); `firewalld.service` is guarded by `ExecCondition` so boot/rebuild cannot silently re-enable a firewall the user turned off.
-18. `kris-app` refuses root; unfree is opt-in per package (`add --unfree`), `upgrade` evaluates the profile with unfree allowed; `remove` takes names only.
-19. `system.stateVersion` is host/profile-owned. Reusable modules must not silently impose it on existing systems.
-20. Automatic Nix GC is disabled until retention is surfaced explicitly in krisNCC; systemd-boot menu entries are capped separately (default 5).
-
-21. Distrobox replaces raw Podman as the user-facing container feature. Podman remains enabled only as a rootless engine underneath Distrobox; krisNCC does not expose a general Podman administration page.
-22. GitHub configuration exchange is always manual and optional. There is no timer, boot-time pull, background sync, automatic apply, or dependency on GitHub availability.
-23. The framework and personal configuration use separate repositories: `krisNOS` and `krisNOS-config`. This prevents an ordinary personal-config sync from silently importing framework/control-center development.
-24. `krisNOS-config` contains no plaintext secrets or runtime databases. It stores only source configuration and explicitly exportable/sanitized preferences.
+1. Base: NixOS upstream 26.05.
+2. Nessun fork profondo di altre distribuzioni.
+3. Uso dei builder immagini nativi di NixOS.
+4. `krisNOS` contiene il framework riutilizzabile; `krisNOS-config` contiene la configurazione personale della macchina.
+5. Home Manager non è un requisito.
+6. Nessun overlay scrivibile generico su `/etc` o `/nix/store`.
+7. Le normali applicazioni appartengono a `nix profile` o Flatpak.
+8. I demoni necessari al desktop sono dichiarati da NixOS, mentre lo stato quotidiano resta gestito tramite API e stato nativi.
+9. Nessun server SSH predefinito.
+10. Plasma 6 Wayland è la sessione principale; XWayland può rimanere per compatibilità.
+11. Il numero di pacchetti di sistema deve rimanere ridotto.
+12. I test locali sono il percorso principale di sviluppo; GitHub CI non è obbligatorio.
+13. firewalld usa il backend NixOS supportato con nftables abilitato.
+14. Hardware e configurazione specifica della macchina vivono soltanto in `krisNOS-config`.
+15. Il profilo live usa password temporanea e sudo senza password; l’host personale iniziale usa autologin, utente `kris` senza password e `wheel` passwordless. La password root viene impostata localmente e non versionata. Questa policy è intenzionalmente temporanea e modificabile.
+16. Lo stato persistente personalizzato da Kris deve restare minimo: attualmente solo lo stato generale del firewall.
+17. `kris-runtimectl` persiste esclusivamente la piccola policy firewall e fornisce anche una mutazione privilegiata allowlisted della radio Bluetooth.
+18. Per Bluetooth la priorità funzionale è soltanto un ON/OFF affidabile: BlueZ rappresenta `Powered`, rfkill gestisce soft/hard block; niente gestione dispositivi avanzata finché non serve.
+19. `kris-app` rifiuta l'esecuzione come root e il supporto unfree è esplicito.
+20. `--impure` è limitato al percorso unfree esplicito.
+21. `system.stateVersion` appartiene all'host/profilo e non al modulo riutilizzabile.
+22. Il garbage collection automatico resta disabilitato finché la retention non sarà resa chiara in krisNCC.
+23. Distrobox è l'interfaccia utente per gli ambienti mutabili; Podman resta infrastruttura sottostante.
+24. Lo scambio della configurazione GitHub è esclusivamente manuale: niente timer, polling, pull o apply automatici.
+25. `krisNOS` e `krisNOS-config` sono repository separati.
+26. `krisNOS-config` non contiene segreti in chiaro né database runtime nativi.
+27. La revisione Nix è fissata dal `flake.lock`; krisNOS non sovrascrive `nix.registry.nixpkgs`.
+28. ISO e VM sono output pesanti espliciti, non normali check del flake.
+29. krisNCC deve preferire API e strumenti nativi rispetto a state machine personalizzate.
+30. Build e valutazione della configurazione utente avvengono senza privilegi; le mutazioni root passano solo attraverso helper fissi.
+31. Nella configurazione personale iniziale `kris` è deliberatamente amministratore passwordless (`wheelNeedsPassword = false`). krisNCC usa `sudo -n` soltanto verso helper fissi e validati, ma questa non è una barriera di sicurezza contro altri processi dell'utente: l'account `kris` è amministrativamente root-equivalente per scelta.
+32. systemd-boot mantiene come baseline 5 configurazioni tramite `krisos.bootEntryLimit = 5`; la retention delle generazioni Nix sul disco resta una policy separata ed esplicita.
+33. Prima dell'installazione definitiva va eseguito un audit/hardening del kernel e dei sysctl, privilegiando protezioni con beneficio reale e compatibilità con AMD/Wayland/Flatpak/Distrobox.

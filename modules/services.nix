@@ -1,7 +1,16 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 {
   # Infrastructure lives in the base; day-to-day state is left mutable.
   networking.networkmanager.enable = true;
+
+  # No WWAN/cellular modem on the target desktop. Plasma may otherwise
+  # pull ModemManager in as an optional integration.
+  networking.modemmanager.enable = false;
 
   services.pipewire = {
     enable = true;

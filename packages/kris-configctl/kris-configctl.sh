@@ -1,11 +1,11 @@
-#!/usr/bin/env bash
 set -euo pipefail
 
 REPO="${KRISOS_CONFIG_REPO:-$HOME/krisNOS-config}"
-HOST="${KRISOS_HOST:-$(hostname -s)}"
+HOST="${KRISOS_HOST:-$(cut -d. -f1 </proc/sys/kernel/hostname)}"
 DEFAULT_REMOTE="${KRISOS_CONFIG_REMOTE:-https://github.com/krism-eu/krisNOS-config.git}"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/krisos"
 STATE_FILE="$STATE_DIR/config-sync.state"
+PENDING_LINK="$STATE_DIR/pending-system"
 
 usage() {
   cat <<'USAGE'
@@ -21,16 +21,22 @@ Usage:
   kris-configctl build
   kris-configctl apply
 
+Internal krisNCC commands:
+  kris-configctl prepare-apply --json
+  kris-configctl record-applied <commit> <toplevel>
+
 Environment:
   KRISOS_CONFIG_REPO     local working tree (default: ~/krisNOS-config)
   KRISOS_CONFIG_REMOTE   clone URL used by init (default: krism-eu/krisNOS-config)
   KRISOS_HOST            NixOS flake host name (default: current short hostname)
+  KRISOS_NONINTERACTIVE  when 1, network Git operations cannot prompt and time out
 
 Safety rules:
 - synchronization is never automatic;
 - never force-pushes or auto-merges diverged histories;
 - never overwrites a dirty working tree;
 - pull is fast-forward only;
+- validate/build/apply refuse lock-file updates;
 - build validates first and does not need root;
 - apply is separate and validates before switching.
 USAGE
@@ -40,6 +46,16 @@ die() { printf 'kris-configctl: %s\n' "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "comando richiesto non trovato: $1"; }
 repo_ok() { [ -d "$REPO/.git" ] || die "repo locale non inizializzato: $REPO"; }
 gitc() { git -C "$REPO" "$@"; }
+
+git_network() {
+  if [ "${KRISOS_NONINTERACTIVE:-0}" = 1 ]; then
+    GIT_TERMINAL_PROMPT=0 timeout 45s \
+      git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=30 -C "$REPO" "$@"
+  else
+    gitc "$@"
+  fi
+}
+
 branch_name() { gitc symbolic-ref --quiet --short HEAD 2>/dev/null || printf 'DETACHED\n'; }
 head_sha() { gitc rev-parse --verify HEAD; }
 upstream_name() { gitc rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true; }
@@ -61,30 +77,83 @@ state_value() {
   sed -n "s/^${key}=//p" "$STATE_FILE" | tail -n 1
 }
 
+current_system() {
+  readlink -f /run/current-system 2>/dev/null || true
+}
+
+current_applied_state() {
+  local recorded_commit recorded_toplevel recorded_at current
+  recorded_commit="$(state_value commit || true)"
+  recorded_toplevel="$(state_value toplevel || true)"
+  recorded_at="$(state_value applied_at || true)"
+  current="$(current_system)"
+
+  if [ -n "$recorded_commit" ] && [ -n "$recorded_toplevel" ] \
+      && [ "$current" = "$recorded_toplevel" ]; then
+    printf '%s|%s|%s\n' "$recorded_commit" "$recorded_toplevel" "$recorded_at"
+  else
+    printf '||\n'
+  fi
+}
+
 status_json() {
-  local branch head up dirty ahead behind applied applied_at
-  branch="$(branch_name)"; head="$(head_sha)"; up="$(upstream_name)"; dirty="$(dirty_flag)"
+  local branch head up dirty ahead behind applied applied_toplevel applied_at current
+  need jq
+  branch="$(branch_name)"
+  head="$(head_sha)"
+  up="$(upstream_name)"
+  dirty="$(dirty_flag)"
   read -r ahead behind < <(ahead_behind)
-  applied="$(state_value commit || true)"; applied_at="$(state_value applied_at || true)"
-  printf '{"schema":2,"repo":"%s","branch":"%s","head":"%s","upstream":"%s","dirty":%s,"ahead":%s,"behind":%s,"host":"%s","appliedCommit":"%s","appliedAt":"%s"}\n' \
-    "${REPO//\"/\\\"}" "${branch//\"/\\\"}" "$head" "${up//\"/\\\"}" "$dirty" "$ahead" "$behind" "${HOST//\"/\\\"}" "${applied//\"/\\\"}" "${applied_at//\"/\\\"}"
+  IFS='|' read -r applied applied_toplevel applied_at < <(current_applied_state)
+  current="$(current_system)"
+
+  jq -cn \
+    --arg repo "$REPO" \
+    --arg branch "$branch" \
+    --arg head "$head" \
+    --arg upstream "$up" \
+    --argjson dirty "$dirty" \
+    --argjson ahead "$ahead" \
+    --argjson behind "$behind" \
+    --arg host "$HOST" \
+    --arg appliedCommit "$applied" \
+    --arg appliedToplevel "$applied_toplevel" \
+    --arg appliedAt "$applied_at" \
+    --arg currentToplevel "$current" \
+    '{
+      schema: 2,
+      repo: $repo,
+      branch: $branch,
+      head: $head,
+      upstream: $upstream,
+      dirty: $dirty,
+      ahead: $ahead,
+      behind: $behind,
+      host: $host,
+      appliedCommit: $appliedCommit,
+      appliedToplevel: $appliedToplevel,
+      appliedAt: $appliedAt,
+      currentToplevel: $currentToplevel
+    }'
 }
 
 status_text() {
-  local ahead behind
+  local ahead behind applied applied_toplevel applied_at
   read -r ahead behind < <(ahead_behind)
+  IFS='|' read -r applied applied_toplevel applied_at < <(current_applied_state)
   printf 'repo=%s\nbranch=%s\nhead=%s\nupstream=%s\ndirty=%s\n' "$REPO" "$(branch_name)" "$(head_sha)" "$(upstream_name)" "$(dirty_flag)"
   printf 'ahead=%s\nbehind=%s\nhost=%s\n' "$ahead" "$behind" "$HOST"
-  printf 'appliedCommit=%s\nappliedAt=%s\n' "$(state_value commit || true)" "$(state_value applied_at || true)"
+  printf 'appliedCommit=%s\nappliedToplevel=%s\nappliedAt=%s\ncurrentToplevel=%s\n' \
+    "$applied" "$applied_toplevel" "$applied_at" "$(current_system)"
 }
 
-require_clean() { [ "$(dirty_flag)" = false ] || die "working tree modificato: commit/stash/ripristina prima della sync"; }
+require_clean() { [ "$(dirty_flag)" = false ] || die "working tree modificato: commit/stash/ripristina prima dell'operazione"; }
 
 fetch_remote() {
   local up
   up="$(upstream_name)"
   [ -n "$up" ] || die "nessun upstream configurato per il branch corrente"
-  gitc fetch --prune --tags
+  git_network fetch --prune --tags
 }
 
 show_diff() {
@@ -108,6 +177,9 @@ show_diff() {
       gitc diff --no-ext-diff --no-color "$up..HEAD"
       shown=1
     fi
+  else
+    printf '%s\n' 'Nessun upstream configurato per il branch corrente.'
+    shown=1
   fi
   [ "$shown" -eq 1 ] || printf 'Nessuna differenza da mostrare.\n'
 }
@@ -127,11 +199,11 @@ safe_push() {
   local up ahead behind
   require_clean
   up="$(upstream_name)"; [ -n "$up" ] || die "nessun upstream configurato"
-  gitc fetch --prune
+  git_network fetch --prune
   read -r ahead behind < <(ahead_behind)
   [ "$behind" -eq 0 ] || die "remote più avanti o divergente: sincronizza prima di push"
   if [ "$ahead" -eq 0 ]; then printf 'Niente da inviare.\n'; return; fi
-  gitc push
+  git_network push
 }
 
 safe_sync() {
@@ -150,54 +222,123 @@ safe_sync() {
   fi
 }
 
-mode() {
-  if [ -f "$REPO/flake.nix" ]; then printf 'flake\n'
-  elif [ -f "$REPO/configuration.nix" ]; then printf 'classic\n'
-  else die "manca flake.nix o configuration.nix nel repo"
-  fi
+tracked_file() {
+  gitc ls-files --error-unmatch -- "$1" >/dev/null 2>&1
+}
+
+flake_preflight() {
+  local hardware="hosts/$HOST/hardware-configuration.nix"
+  [ -f "$REPO/flake.nix" ] || die "flake.nix mancante nel repo"
+  [ -f "$REPO/flake.lock" ] || die "flake.lock mancante: genera e committa il lock prima di validare/applicare"
+  tracked_file flake.lock || die "flake.lock presente ma non tracciato da Git"
+  [ -f "$REPO/$hardware" ] || die "hardware-configuration.nix mancante per l'host $HOST"
+  tracked_file "$hardware" || die "hardware-configuration.nix presente ma non tracciato da Git per l'host $HOST"
+}
+
+validate_config_raw() {
+  flake_preflight
+  need nix
+  nix eval --no-update-lock-file --raw "$REPO#nixosConfigurations.$HOST.config.system.build.toplevel.drvPath" >/dev/null
 }
 
 validate_config() {
-  need nix
-  case "$(mode)" in
-    flake) nix eval --raw "$REPO#nixosConfigurations.$HOST.config.system.build.toplevel.drvPath" >/dev/null ;;
-    classic)
-      need nix-instantiate
-      nix-instantiate '<nixpkgs/nixos>' -A system -I "nixos-config=$REPO/configuration.nix" >/dev/null
-      ;;
-  esac
+  validate_config_raw
   printf 'Validazione OK.\n'
 }
 
 build_config() {
-  validate_config
-  case "$(mode)" in
-    flake)
-      nix build --no-link "$REPO#nixosConfigurations.$HOST.config.system.build.toplevel"
-      ;;
-    classic)
-      need nix-build
-      nix-build '<nixpkgs/nixos>' -A system -I "nixos-config=$REPO/configuration.nix" --no-out-link
-      ;;
-  esac
+  validate_config_raw
+  nix build --no-update-lock-file --no-link "$REPO#nixosConfigurations.$HOST.config.system.build.toplevel"
   printf 'Build OK. Nessuna modifica applicata al sistema.\n'
 }
 
-record_applied() {
+prepare_apply_json() (
+  local commit toplevel plan_json keep_pending=0
+
+  trap '[ "$keep_pending" -eq 1 ] || rm -f -- "$PENDING_LINK"' EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  flake_preflight
+  require_clean
+  commit="$(head_sha)"
+  validate_config_raw
+
   mkdir -p "$STATE_DIR"
-  printf 'commit=%s\napplied_at=%s\n' "$(head_sha)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$STATE_FILE"
+  rm -f -- "$PENDING_LINK"
+
+  toplevel="$(
+    nix build \
+      --no-update-lock-file \
+      --out-link "$PENDING_LINK" \
+      --print-out-paths \
+      "$REPO#nixosConfigurations.$HOST.config.system.build.toplevel"
+  )"
+
+  [ -n "$toplevel" ] \
+    || die "build del sistema non ha prodotto un toplevel"
+
+  [ -x "$toplevel/bin/switch-to-configuration" ] \
+    || die "switch-to-configuration non trovato nel toplevel"
+
+  [ "$(head_sha)" = "$commit" ] \
+    || die "HEAD cambiato durante la build: ripetere l'operazione"
+
+  require_clean
+
+  plan_json="$(
+    jq -cn \
+      --arg commit "$commit" \
+      --arg toplevel "$toplevel" \
+      '{commit:$commit,toplevel:$toplevel}'
+  )"
+
+  keep_pending=1
+  printf '%s\n' "$plan_json"
+)
+
+record_applied() {
+  local commit="$1" toplevel="$2" current
+  case "$commit" in
+    (*[!0-9a-f]*|'') die "commit applicato non valido" ;;
+  esac
+  [ "${#commit}" -eq 40 ] || die "commit applicato non valido"
+  require_clean
+  [ "$(head_sha)" = "$commit" ] || die "HEAD non coincide con il commit costruito"
+  toplevel="$(readlink -f -- "$toplevel" 2>/dev/null || true)"
+  current="$(current_system)"
+  [ -n "$toplevel" ] && [ "$current" = "$toplevel" ] || die "il sistema corrente non coincide con il toplevel appena applicato"
+  mkdir -p "$STATE_DIR"
+  printf 'commit=%s\ntoplevel=%s\napplied_at=%s\n' \
+    "$commit" "$toplevel" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$STATE_FILE"
+  rm -f -- "$PENDING_LINK"
 }
 
-apply_config() {
-  need nixos-rebuild
-  validate_config
-  case "$(mode)" in
-    flake) sudo nixos-rebuild switch --flake "$REPO#$HOST" ;;
-    classic) sudo nixos-rebuild switch -I "nixos-config=$REPO/configuration.nix" ;;
-  esac
-  record_applied
-  printf 'Applicata configurazione commit %s\n' "$(head_sha)"
-}
+apply_config() (
+  local plan commit toplevel activate_helper
+
+  trap 'rm -f -- "$PENDING_LINK"' EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  plan="$(prepare_apply_json)"
+  commit="$(printf '%s' "$plan" | jq -r .commit)"
+  toplevel="$(printf '%s' "$plan" | jq -r .toplevel)"
+
+  need sudo
+
+  activate_helper="$(command -v kris-system-activate || true)"
+  [ -n "$activate_helper" ] && [ -x "$activate_helper" ] \
+    || die "kris-system-activate non disponibile"
+
+  sudo -n -- "$activate_helper" "$toplevel"
+
+  record_applied "$commit" "$toplevel"
+
+  printf 'Applicata configurazione commit %s\n' "$commit"
+)
 
 cmd="${1:-}"
 case "$cmd" in
@@ -205,7 +346,11 @@ case "$cmd" in
     [ "$#" -le 2 ] || { usage >&2; exit 2; }
     need git
     [ ! -e "$REPO" ] || die "destinazione già esistente: $REPO"
-    git clone -- "${2:-$DEFAULT_REMOTE}" "$REPO"
+    if [ "${KRISOS_NONINTERACTIVE:-0}" = 1 ]; then
+      GIT_TERMINAL_PROMPT=0 timeout 45s git clone -- "${2:-$DEFAULT_REMOTE}" "$REPO"
+    else
+      git clone -- "${2:-$DEFAULT_REMOTE}" "$REPO"
+    fi
     ;;
   status)
     [ "$#" -le 2 ] || { usage >&2; exit 2; }
@@ -219,7 +364,15 @@ case "$cmd" in
   sync) [ "$#" -eq 1 ] || { usage >&2; exit 2; }; need git; repo_ok; safe_sync ;;
   validate) [ "$#" -eq 1 ] || { usage >&2; exit 2; }; need git; repo_ok; validate_config ;;
   build) [ "$#" -eq 1 ] || { usage >&2; exit 2; }; need git; repo_ok; build_config ;;
-  apply) [ "$#" -eq 1 ] || { usage >&2; exit 2; }; need git; repo_ok; require_clean; apply_config ;;
+  prepare-apply)
+    [ "$#" -eq 2 ] && [ "$2" = --json ] || { usage >&2; exit 2; }
+    need git; repo_ok; prepare_apply_json
+    ;;
+  record-applied)
+    [ "$#" -eq 3 ] || { usage >&2; exit 2; }
+    need git; repo_ok; record_applied "$2" "$3"
+    ;;
+  apply) [ "$#" -eq 1 ] || { usage >&2; exit 2; }; need git; repo_ok; apply_config ;;
   -h|--help|help|'') usage ;;
   *) usage >&2; exit 2 ;;
 esac

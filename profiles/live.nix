@@ -1,11 +1,10 @@
-{ config, lib, pkgs, modulesPath, ... }:
 {
-  # Use NixOS' official installation-media base. It provides the ISO-specific
-  # filesystem layout instead of requiring a real host root filesystem.
-  imports = [
-    "${modulesPath}/installer/cd-dvd/installation-cd-base.nix"
-  ];
-
+  config,
+  lib,
+  pkgs,
+  ...
+}:
+{
   krisos = {
     userName = "kris";
     hostName = "krisos-live";
@@ -16,13 +15,56 @@
 
   users.users.kris = {
     isNormalUser = true;
-    extraGroups = [ "wheel" "networkmanager" "video" "render" "audio" "lp" ];
-    subUidRanges = [ { startUid = 100000; count = 65536; } ];
-    subGidRanges = [ { startGid = 100000; count = 65536; } ];
+    extraGroups = [
+      "wheel"
+      "networkmanager"
+      "video"
+      "render"
+      "audio"
+      "lp"
+    ];
+    subUidRanges = [
+      {
+        startUid = 100000;
+        count = 65536;
+      }
+    ];
+    subGidRanges = [
+      {
+        startGid = 100000;
+        count = 65536;
+      }
+    ];
     initialPassword = "live";
   };
 
   security.sudo.wheelNeedsPassword = false;
   users.mutableUsers = true;
+
+  # La ISO krisNOS non porta il manuale NixOS locale nel menu.
+  documentation.nixos.enable = lib.mkForce false;
+
+
+  # Solo per system.build.vm: consente i test del guest dal terminale host.
+  # Non modifica né la configurazione installata né l'ISO.
+  virtualisation.vmVariant = {
+    services.openssh.enable = lib.mkForce true;
+
+    services.openssh.settings = {
+      PasswordAuthentication = true;
+      KbdInteractiveAuthentication = false;
+    };
+
+    networking.firewall.allowedTCPPorts = [ 22 ];
+
+    virtualisation.forwardPorts = [
+      {
+        from = "host";
+        host.port = 2222;
+        guest.port = 22;
+      }
+    ];
+  };
+
   system.stateVersion = "26.05";
 }

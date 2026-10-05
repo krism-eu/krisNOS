@@ -1,4 +1,0 @@
-# Do not use this file as hardware configuration.
-# On the installed target generate the real file with:
-# sudo nixos-generate-config --show-hardware-config > hosts/krisos/hardware-configuration.nix
-{ ... }: { }

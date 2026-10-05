@@ -40,7 +40,16 @@ Kirigami.ScrollablePage {
                     Layout.fillWidth: true
                     Controls.TextField { id: search; Layout.fillWidth: true; placeholderText: qsTr("Cerca in nixpkgs…"); onAccepted: KrisBackend.searchSoftware(text) }
                     Controls.Button { text: qsTr("Cerca"); enabled: search.text.trim().length > 0 && !KrisBackend.busy; onClicked: KrisBackend.searchSoftware(search.text) }
-                    Controls.Button { text: qsTr("Aggiornamenti"); enabled: !KrisBackend.busy; onClicked: KrisBackend.previewSoftwareUpdates() }
+                    Controls.CheckBox {
+                        id: allowUnfree
+                        text: qsTr("Non libere")
+                        enabled: !KrisBackend.busy
+                    }
+                    Controls.Button {
+                        text: qsTr("Aggiornamenti")
+                        enabled: !KrisBackend.busy
+                        onClicked: KrisBackend.previewSoftwareUpdates(allowUnfree.checked)
+                    }
                 }
                 Controls.Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: qsTr("Installa aggiunge l'app al tuo profilo senza rebuild. Prova usa nix run e non installa nulla."); opacity: 0.72 }
                 Repeater {
@@ -54,8 +63,8 @@ Kirigami.ScrollablePage {
                                 Controls.Label { text: modelData.name || modelData.attribute; font.bold: true }
                                 Controls.Label { Layout.fillWidth: true; text: (modelData.version ? modelData.version + " · " : "") + (modelData.description || modelData.attribute); elide: Text.ElideRight; opacity: 0.75 }
                             }
-                            Controls.Button { text: qsTr("Prova"); onClicked: KrisBackend.runSoftware(modelData.attribute) }
-                            Controls.Button { text: qsTr("Installa"); enabled: !KrisBackend.busy; onClicked: KrisBackend.addSoftware(modelData.attribute, false) }
+                            Controls.Button { text: qsTr("Prova"); onClicked: KrisBackend.runSoftware(modelData.attribute, allowUnfree.checked) }
+                            Controls.Button { text: qsTr("Installa"); enabled: !KrisBackend.busy; onClicked: KrisBackend.addSoftware(modelData.attribute, allowUnfree.checked) }
                         }
                     }
                 }

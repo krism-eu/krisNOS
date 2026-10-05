@@ -1,10 +1,28 @@
-{ lib, writeShellApplication, systemd, util-linux, coreutils, gnused }:
+{
+  lib,
+  writeShellApplication,
+  systemd,
+  coreutils,
+  gnused,
+  util-linux,
+  bluez,
+}:
+
 writeShellApplication {
   name = "kris-runtimectl";
-  runtimeInputs = [ systemd util-linux coreutils gnused ];
+
+  runtimeInputs = [
+    systemd
+    coreutils
+    gnused
+    util-linux
+    bluez
+  ];
+
   text = builtins.readFile ./kris-runtimectl.sh;
+
   meta = {
-    description = "Apply a tiny allowlisted mutable runtime state on krisNOS";
+    description = "Helper runtime ristretto per firewall e radio Bluetooth di krisNOS";
     license = lib.licenses.mit;
     platforms = lib.platforms.linux;
   };

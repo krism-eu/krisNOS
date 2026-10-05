@@ -57,7 +57,7 @@ User software via `nix profile` sits deliberately outside the system rebuild cyc
 - normal app install never triggers a system rebuild;
 - build and apply are separate operations;
 - no arbitrary shell execution as root;
-- privileged actions use fixed helpers, validated arguments and a narrow Polkit path;
+- privileged actions use fixed helpers and validated arguments; on the initial personal host they are invoked through non-interactive `sudo -n`;
 - no hidden krisNCC database becomes a second source of truth;
 - native service state stays native;
 - structural defaults in krisNOS use `mkDefault` when personal configuration is expected to override them;

@@ -85,7 +85,7 @@ krisNCC becomes an orchestrator over explicit backends:
 
 - Software/Nix -> `kris-app` / user Nix profile;
 - Flatpak -> Flatpak;
-- Containers -> Podman;
+- Containers -> Distrobox, con Podman rootless come motore nascosto;
 - Network -> NetworkManager D-Bus;
 - Firewall -> firewalld D-Bus/firewall-cmd;
 - Bluetooth -> BlueZ D-Bus/rfkill;

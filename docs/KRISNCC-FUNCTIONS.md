@@ -40,7 +40,7 @@ Structural NixOS changes and optional GitHub exchange:
 - advanced option lookup only when it saves real terminal/manual work;
 - validate;
 - unprivileged build;
-- explicit privileged apply through a narrow Polkit path.
+- explicit privileged apply through the fixed activation helper via non-interactive `sudo -n` on the initial personal host.
 
 `krisncc-managed.nix` is the only file krisNCC may regenerate. `free.nix` and other personal modules are never rewritten.
 

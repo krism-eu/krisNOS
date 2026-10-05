@@ -13,22 +13,22 @@ krisNCC keeps the useful breadth and UI work of the existing krisCC while replac
 - **Ripristino** — NixOS and user-profile generations;
 - **Strumenti** — personal commands and useful external/KDE tools.
 
-The names are simple; the capabilities behind them can be broad.
-
 ## Current bootstrap
 
 Already wired:
 
-- Home RAM value excluding cache/buffers and swap, plus CPU temperature;
-- Nix package search, user-profile install/remove, update preview and `nix run` try-without-installing;
+- Home RAM excluding cache/buffers and swap, plus CPU temperature;
+- Nix package search, user-profile install/remove, update preview and `nix run`;
 - Distrobox inventory;
-- Config local/remote status, explicit fetch/sync, diff, validation and unprivileged build;
-- Bluetooth/firewall immediate toggles through the restricted runtime helper;
+- Config local/remote status, explicit fetch/sync, scrollable diff, lock-pinned validation/build and race-safe Apply;
+- firewall and simple Bluetooth ON/OFF through fixed root helpers;
 - read-only NixOS/profile generation history;
 - useful KDE tool launchers.
 
-Not yet enabled until the relevant contract is tested: privileged NixOS Apply, system rollback, full Flatpak/Distrobox mutation UI and full native NetworkManager/BlueZ/PipeWire/CUPS/firewalld pages.
+The initial personal host intentionally mirrors the convenient Fedora-era setup: `kris` has autologin, no local password and passwordless wheel administration, while root gets a separate local password during installation. krisNCC uses `sudo -n` only with its fixed helpers. This is deliberately convenient, not a security boundary, and can be tightened later.
+
+Still pending real VM/hardware validation: Apply/rollback, systemd-boot entry retention, firewall/Bluetooth ON/OFF, full Flatpak/Distrobox mutation UI, native NetworkManager/PipeWire/CUPS/firewalld pages and kernel hardening.
 
 ## Non-negotiable rules
 
-No background daemon, automatic Git sync, automatic rebuild, hidden `sudo`, arbitrary root shell execution or GUI-owned duplicate state database.
+No background Git daemon, automatic sync/rebuild/apply, arbitrary generated root shell command or duplicate GUI state database. Native owners remain the source of truth.

@@ -2,14 +2,22 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QHash>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcess>
+#include <QProcessEnvironment>
 #include <QStandardPaths>
-#include <QSysInfo>
+#include <QTimer>
 
 #include <algorithm>
+
+#ifdef Q_OS_UNIX
+#include <signal.h>
+#include <unistd.h>
+#endif
 
 KrisNccBackend::KrisNccBackend(QObject *parent)
     : QObject(parent)
@@ -17,6 +25,12 @@ KrisNccBackend::KrisNccBackend(QObject *parent)
     refreshResources();
     refreshConfigStatus();
     refreshRuntimeStatus();
+
+}
+
+bool KrisNccBackend::canCancel() const
+{
+    return m_activeUserProcess && m_activeUserProcess->state() != QProcess::NotRunning;
 }
 
 void KrisNccBackend::setBusy(bool value)
@@ -107,65 +121,202 @@ double KrisNccBackend::readCpuTemperature()
     return fallback;
 }
 
-void KrisNccBackend::startCommand(const QString &program, const QStringList &arguments,
-                                  const QString &operation, bool userOperation)
+void KrisNccBackend::terminateProcessGroup(QProcess *process, bool force)
+{
+    if (!process || process->state() == QProcess::NotRunning)
+        return;
+#ifdef Q_OS_UNIX
+    const qint64 pid = process->processId();
+    if (pid > 0) {
+        ::kill(-static_cast<pid_t>(pid), force ? SIGKILL : SIGTERM);
+        return;
+    }
+#endif
+    if (force)
+        process->kill();
+    else
+        process->terminate();
+}
+
+QProcess *KrisNccBackend::startCommand(const QString &program, const QStringList &arguments,
+                                       const QString &operation, bool userOperation)
 {
     const QString executable = QStandardPaths::findExecutable(program);
     if (executable.isEmpty()) {
         setMessage(tr("Comando non disponibile: %1").arg(program));
-        return;
+        return nullptr;
     }
     if (userOperation && m_busy) {
         setMessage(tr("Un'altra operazione è già in corso."));
-        return;
+        return nullptr;
     }
-    if (userOperation)
-        setBusy(true);
 
     auto *process = new QProcess(this);
+#ifdef Q_OS_UNIX
+    process->setChildProcessModifier([] { ::setpgid(0, 0); });
+#endif
     process->setProcessChannelMode(QProcess::SeparateChannels);
+
+    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+    if (operation == QStringLiteral("config-fetch") || operation == QStringLiteral("config-sync"))
+        environment.insert(QStringLiteral("KRISOS_NONINTERACTIVE"), QStringLiteral("1"));
+    if (operation == QStringLiteral("bluez-status"))
+        environment.insert(QStringLiteral("LC_ALL"), QStringLiteral("C"));
+    process->setProcessEnvironment(environment);
+
+    if (userOperation) {
+        m_activeUserProcess = process;
+        setBusy(true);
+    }
+
     connect(process, &QProcess::finished, this,
             [this, process, operation, userOperation](int exitCode, QProcess::ExitStatus status) {
         const QByteArray out = process->readAllStandardOutput();
         const QByteArray err = process->readAllStandardError();
-        handleCommandResult(operation, status == QProcess::NormalExit ? exitCode : 127, out, err);
+        const bool cancelled = m_cancelledProcess == process;
+
+        if (m_searchProcess == process)
+            m_searchProcess = nullptr;
+        if (m_activeUserProcess == process)
+            m_activeUserProcess = nullptr;
+        if (m_cancelledProcess == process)
+            m_cancelledProcess = nullptr;
+        if (userOperation)
+            setBusy(false);
+
+        if (cancelled)
+            setMessage(tr("Operazione annullata."));
+        else
+            handleCommandResult(operation, status == QProcess::NormalExit ? exitCode : 127, out, err);
+        process->deleteLater();
+    });
+
+    connect(process, &QProcess::errorOccurred, this,
+            [this, process, operation, userOperation](QProcess::ProcessError error) {
+        if (error != QProcess::FailedToStart)
+            return;
+        if (m_searchProcess == process)
+            m_searchProcess = nullptr;
+        if (m_activeUserProcess == process)
+            m_activeUserProcess = nullptr;
+        setMessage(tr("%1: impossibile avviare il processo: %2")
+                       .arg(operation, process->errorString()));
         if (userOperation)
             setBusy(false);
         process->deleteLater();
     });
+
     process->start(executable, arguments);
+    return process;
+}
+
+void KrisNccBackend::cancelCurrentOperation()
+{
+    if (!canCancel()) {
+        setMessage(tr("Questa operazione non può essere annullata in sicurezza."));
+        return;
+    }
+
+    QPointer<QProcess> process = m_activeUserProcess;
+    m_cancelledProcess = process;
+    terminateProcessGroup(process, false);
+    setMessage(tr("Annullamento richiesto…"));
+
+    QTimer::singleShot(1500, this, [this, process] {
+        if (process && process->state() != QProcess::NotRunning)
+            terminateProcessGroup(process, true);
+    });
 }
 
 void KrisNccBackend::startRuntimeMutation(const QString &feature, bool enabled)
 {
     if (feature != QStringLiteral("bluetooth") && feature != QStringLiteral("firewall"))
         return;
-    const QString pkexec = QStandardPaths::findExecutable(QStringLiteral("pkexec"));
+
     const QString helper = QStandardPaths::findExecutable(QStringLiteral("kris-runtimectl"));
-    if (pkexec.isEmpty() || helper.isEmpty()) {
-        setMessage(tr("Percorso amministrativo non disponibile."));
+    if (helper.isEmpty()) {
+        setMessage(tr("Helper runtime non disponibile."));
         return;
     }
-    startCommand(pkexec, {helper, feature, enabled ? QStringLiteral("on") : QStringLiteral("off")},
+
+    startCommand(QStringLiteral("sudo"),
+                 {QStringLiteral("-n"), QStringLiteral("--"), helper, feature,
+                  enabled ? QStringLiteral("on") : QStringLiteral("off")},
                  QStringLiteral("runtime-mutation"), true);
 }
 
 QString KrisNccBackend::nixAttributeFromSearchKey(const QString &key)
 {
-    const QString archMarker = QStringLiteral(".%1.").arg(QSysInfo::currentCpuArchitecture());
-    const int pos = key.indexOf(archMarker);
-    return pos >= 0 ? key.mid(pos + archMarker.size()) : key.section(QLatin1Char('.'), -1);
+    static const QStringList prefixes = {
+        QStringLiteral("legacyPackages."),
+        QStringLiteral("packages.")
+    };
+
+    for (const QString &prefix : prefixes) {
+        if (!key.startsWith(prefix))
+            continue;
+        const int systemEnd = key.indexOf(QLatin1Char('.'), prefix.size());
+        if (systemEnd >= 0 && systemEnd + 1 < key.size())
+            return key.mid(systemEnd + 1);
+    }
+    return key;
+}
+
+void KrisNccBackend::updateBluetoothState()
+{
+    QString state = QStringLiteral("unknown");
+    if (m_rfkillBluetoothState == QStringLiteral("unavailable"))
+        state = QStringLiteral("unavailable");
+    else if (m_rfkillBluetoothState == QStringLiteral("hard-blocked"))
+        state = QStringLiteral("hard-blocked");
+    else if (m_rfkillBluetoothState == QStringLiteral("soft-blocked"))
+        state = QStringLiteral("off");
+    else if (m_rfkillBluetoothState == QStringLiteral("unblocked")) {
+        if (m_bluezBluetoothState == QStringLiteral("on"))
+            state = QStringLiteral("on");
+        else if (m_bluezBluetoothState == QStringLiteral("off"))
+            state = QStringLiteral("off");
+        else if (m_bluezBluetoothState == QStringLiteral("unavailable"))
+            state = QStringLiteral("unavailable");
+    }
+
+    if (m_runtimeStatus.value(QStringLiteral("bluetooth")).toString() == state)
+        return;
+    m_runtimeStatus.insert(QStringLiteral("bluetooth"), state);
+    emit runtimeStatusChanged();
 }
 
 void KrisNccBackend::handleCommandResult(const QString &operation, int exitCode,
                                          const QByteArray &out, const QByteArray &err)
 {
+    if (operation.startsWith(QStringLiteral("software-search:"))) {
+        bool serialOk = false;
+        const quint64 serial = operation.section(QLatin1Char(':'), 1, 1).toULongLong(&serialOk);
+        if (!serialOk || serial != m_searchSerial)
+            return;
+    }
+
     const QString errorText = QString::fromUtf8(err).trimmed();
     const QString outputText = QString::fromUtf8(out).trimmed();
     if (exitCode != 0) {
-        setMessage(errorText.isEmpty() ? tr("Operazione non riuscita (%1).").arg(exitCode) : errorText.left(1200));
+        if (operation == QStringLiteral("bluetooth-status")) {
+            m_rfkillBluetoothState = QStringLiteral("unknown");
+            updateBluetoothState();
+            return;
+        }
+        if (operation == QStringLiteral("bluez-status")) {
+            m_bluezBluetoothState = QStringLiteral("unavailable");
+            updateBluetoothState();
+            return;
+        }
+
+        setMessage(errorText.isEmpty()
+                       ? tr("Operazione non riuscita (%1).").arg(exitCode)
+                       : errorText.left(1200));
         if (operation == QStringLiteral("runtime-mutation"))
             refreshRuntimeStatus();
+        if (operation == QStringLiteral("config-apply"))
+            refreshConfigStatus();
         return;
     }
 
@@ -179,9 +330,71 @@ void KrisNccBackend::handleCommandResult(const QString &operation, int exitCode,
             m_configStatus = doc.object().toVariantMap();
             emit configStatusChanged();
         } else {
+            const QVariant bluetooth = m_runtimeStatus.value(QStringLiteral("bluetooth"));
             m_runtimeStatus = doc.object().toVariantMap();
+            if (bluetooth.isValid())
+                m_runtimeStatus.insert(QStringLiteral("bluetooth"), bluetooth);
             emit runtimeStatusChanged();
         }
+        return;
+    }
+
+    if (operation == QStringLiteral("bluetooth-status")) {
+        const QJsonDocument doc = QJsonDocument::fromJson(out);
+        QString rfkillState = QStringLiteral("unknown");
+        if (doc.isObject()) {
+            const QJsonArray devices = doc.object().value(QStringLiteral("rfkilldevices")).toArray();
+            bool found = false;
+            bool softBlocked = false;
+            bool hardBlocked = false;
+            const auto isBlocked = [](const QJsonValue &value) {
+                if (value.isBool())
+                    return value.toBool();
+                if (value.isDouble())
+                    return value.toInt() != 0;
+                const QString text = value.toVariant().toString().trimmed().toLower();
+                return text == QStringLiteral("blocked") || text == QStringLiteral("yes")
+                    || text == QStringLiteral("true") || text == QStringLiteral("1");
+            };
+            for (const QJsonValue &value : devices) {
+                if (!value.isObject())
+                    continue;
+                const QJsonObject device = value.toObject();
+                const QString type = device.value(QStringLiteral("type")).toVariant().toString().trimmed();
+                if (type.compare(QStringLiteral("bluetooth"), Qt::CaseInsensitive) != 0)
+                    continue;
+                found = true;
+                softBlocked = softBlocked || isBlocked(device.value(QStringLiteral("soft")));
+                hardBlocked = hardBlocked || isBlocked(device.value(QStringLiteral("hard")));
+            }
+            if (!found)
+                rfkillState = QStringLiteral("unavailable");
+            else if (hardBlocked)
+                rfkillState = QStringLiteral("hard-blocked");
+            else if (softBlocked)
+                rfkillState = QStringLiteral("soft-blocked");
+            else
+                rfkillState = QStringLiteral("unblocked");
+        }
+        m_rfkillBluetoothState = rfkillState;
+        updateBluetoothState();
+        return;
+    }
+
+    if (operation == QStringLiteral("bluez-status")) {
+        QString bluezState = QStringLiteral("unavailable");
+        const QStringList lines = outputText.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+        for (const QString &line : lines) {
+            const QString trimmed = line.trimmed();
+            if (!trimmed.startsWith(QStringLiteral("Powered:"), Qt::CaseInsensitive))
+                continue;
+            const QString value = trimmed.section(QLatin1Char(':'), 1).trimmed().toLower();
+            bluezState = (value == QStringLiteral("yes") || value == QStringLiteral("true"))
+                ? QStringLiteral("on") : QStringLiteral("off");
+            break;
+        }
+        m_bluezBluetoothState = bluezState;
+        updateBluetoothState();
         return;
     }
 
@@ -209,16 +422,11 @@ void KrisNccBackend::handleCommandResult(const QString &operation, int exitCode,
     }
 
     if (operation.startsWith(QStringLiteral("software-search:"))) {
-        bool serialOk = false;
-        const quint64 serial = operation.section(QLatin1Char(':'), 1, 1).toULongLong(&serialOk);
-        if (!serialOk || serial != m_searchSerial)
-            return;
         const QJsonDocument doc = QJsonDocument::fromJson(out);
         QVariantList list;
         if (doc.isObject()) {
             const QJsonObject root = doc.object();
-            int count = 0;
-            for (auto it = root.begin(); it != root.end() && count < 60; ++it, ++count) {
+            for (auto it = root.begin(); it != root.end(); ++it) {
                 const QJsonObject meta = it.value().toObject();
                 QVariantMap row;
                 row.insert(QStringLiteral("attribute"), nixAttributeFromSearchKey(it.key()));
@@ -228,6 +436,32 @@ void KrisNccBackend::handleCommandResult(const QString &operation, int exitCode,
                 list.append(row);
             }
         }
+
+        const QString query = m_searchQuery.trimmed().toLower();
+        const auto score = [&query](const QVariant &value) {
+            const QVariantMap row = value.toMap();
+            const QString name = row.value(QStringLiteral("name")).toString().toLower();
+            const QString attr = row.value(QStringLiteral("attribute")).toString().toLower();
+            if (name == query)
+                return 0;
+            if (name.startsWith(query))
+                return 1;
+            if (name.contains(query))
+                return 2;
+            if (attr.startsWith(query) || attr.contains(QStringLiteral(".") + query))
+                return 3;
+            return 4;
+        };
+        std::stable_sort(list.begin(), list.end(), [&score](const QVariant &a, const QVariant &b) {
+            const int sa = score(a);
+            const int sb = score(b);
+            if (sa != sb)
+                return sa < sb;
+            return a.toMap().value(QStringLiteral("name")).toString()
+                .localeAwareCompare(b.toMap().value(QStringLiteral("name")).toString()) < 0;
+        });
+        if (list.size() > 60)
+            list = list.mid(0, 60);
         m_searchResults = list;
         emit searchResultsChanged();
         return;
@@ -254,7 +488,7 @@ void KrisNccBackend::handleCommandResult(const QString &operation, int exitCode,
     }
 
     if (operation == QStringLiteral("config-fetch") || operation == QStringLiteral("config-sync")
-        || operation == QStringLiteral("config-build"))
+        || operation == QStringLiteral("config-build") || operation == QStringLiteral("config-apply"))
         refreshConfigStatus();
     if (operation == QStringLiteral("runtime-mutation"))
         refreshRuntimeStatus();
@@ -265,40 +499,138 @@ void KrisNccBackend::handleCommandResult(const QString &operation, int exitCode,
     setMessage(message.isEmpty() ? tr("Operazione completata.") : message.left(1200));
 }
 
-void KrisNccBackend::refreshConfigStatus() { startCommand(QStringLiteral("kris-configctl"), {QStringLiteral("status"), QStringLiteral("--json")}, QStringLiteral("config-status")); }
-void KrisNccBackend::fetchConfig() { startCommand(QStringLiteral("kris-configctl"), {QStringLiteral("fetch")}, QStringLiteral("config-fetch"), true); }
-void KrisNccBackend::showConfigDiff() { startCommand(QStringLiteral("kris-configctl"), {QStringLiteral("diff")}, QStringLiteral("config-diff"), true); }
-void KrisNccBackend::syncConfig() { startCommand(QStringLiteral("kris-configctl"), {QStringLiteral("sync")}, QStringLiteral("config-sync"), true); }
-void KrisNccBackend::validateConfig() { startCommand(QStringLiteral("kris-configctl"), {QStringLiteral("validate")}, QStringLiteral("config-validate"), true); }
-void KrisNccBackend::buildConfig() { startCommand(QStringLiteral("kris-configctl"), {QStringLiteral("build")}, QStringLiteral("config-build"), true); }
-void KrisNccBackend::refreshRuntimeStatus() { startCommand(QStringLiteral("kris-runtimectl"), {QStringLiteral("status"), QStringLiteral("--json")}, QStringLiteral("runtime-status")); }
-void KrisNccBackend::setBluetoothEnabled(bool enabled) { startRuntimeMutation(QStringLiteral("bluetooth"), enabled); }
-void KrisNccBackend::setFirewallEnabled(bool enabled) { startRuntimeMutation(QStringLiteral("firewall"), enabled); }
-void KrisNccBackend::refreshSoftware() { startCommand(QStringLiteral("kris-app"), {QStringLiteral("list"), QStringLiteral("--json")}, QStringLiteral("software-list")); }
+void KrisNccBackend::refreshConfigStatus()
+{
+    startCommand(QStringLiteral("kris-configctl"),
+                 {QStringLiteral("status"), QStringLiteral("--json")},
+                 QStringLiteral("config-status"));
+}
+void KrisNccBackend::fetchConfig()
+{
+    startCommand(QStringLiteral("kris-configctl"), {QStringLiteral("fetch")}, QStringLiteral("config-fetch"), true);
+}
+void KrisNccBackend::showConfigDiff()
+{
+    startCommand(QStringLiteral("kris-configctl"), {QStringLiteral("diff")}, QStringLiteral("config-diff"), true);
+}
+void KrisNccBackend::syncConfig()
+{
+    startCommand(QStringLiteral("kris-configctl"), {QStringLiteral("sync")}, QStringLiteral("config-sync"), true);
+}
+void KrisNccBackend::validateConfig()
+{
+    startCommand(QStringLiteral("kris-configctl"), {QStringLiteral("validate")}, QStringLiteral("config-validate"), true);
+}
+void KrisNccBackend::buildConfig()
+{
+    startCommand(QStringLiteral("kris-configctl"), {QStringLiteral("build")}, QStringLiteral("config-build"), true);
+}
+void KrisNccBackend::applyConfig()
+{
+    startCommand(QStringLiteral("kris-configctl"),
+                 {QStringLiteral("apply")},
+                 QStringLiteral("config-apply"), true);
+}
+
+void KrisNccBackend::refreshRuntimeStatus()
+{
+    m_rfkillBluetoothState = QStringLiteral("unknown");
+    m_bluezBluetoothState = QStringLiteral("unknown");
+
+    startCommand(QStringLiteral("kris-runtimectl"),
+                 {QStringLiteral("status"), QStringLiteral("--json")},
+                 QStringLiteral("runtime-status"));
+    startCommand(QStringLiteral("rfkill"),
+                 {QStringLiteral("--json"), QStringLiteral("--output"),
+                  QStringLiteral("TYPE,SOFT,HARD"), QStringLiteral("list"),
+                  QStringLiteral("bluetooth")},
+                 QStringLiteral("bluetooth-status"));
+    startCommand(QStringLiteral("bluetoothctl"),
+                 {QStringLiteral("show")},
+                 QStringLiteral("bluez-status"));
+}
+
+void KrisNccBackend::setBluetoothEnabled(bool enabled)
+{
+    startRuntimeMutation(QStringLiteral("bluetooth"), enabled);
+}
+void KrisNccBackend::setFirewallEnabled(bool enabled)
+{
+    startRuntimeMutation(QStringLiteral("firewall"), enabled);
+}
+void KrisNccBackend::refreshSoftware()
+{
+    startCommand(QStringLiteral("kris-app"),
+                 {QStringLiteral("list"), QStringLiteral("--json")},
+                 QStringLiteral("software-list"));
+}
+
 void KrisNccBackend::searchSoftware(const QString &query)
 {
-    if (query.trimmed().isEmpty())
+    const QString trimmed = query.trimmed();
+    if (trimmed.isEmpty())
         return;
-    ++m_searchSerial;
-    startCommand(QStringLiteral("kris-app"), {QStringLiteral("search"), QStringLiteral("--json"), query.trimmed()}, QStringLiteral("software-search:%1").arg(m_searchSerial));
-}
-void KrisNccBackend::addSoftware(const QString &attribute, bool allowUnfree) { QStringList a{QStringLiteral("add")}; if (allowUnfree) a << QStringLiteral("--unfree"); a << attribute; startCommand(QStringLiteral("kris-app"), a, QStringLiteral("software-add"), true); }
-void KrisNccBackend::runSoftware(const QString &attribute)
-{
-    const QString helper = QStandardPaths::findExecutable(QStringLiteral("kris-app"));
-    if (helper.isEmpty() || attribute.trimmed().isEmpty()) {
-        setMessage(tr("Impossibile avviare il programma di prova."));
-        return;
-    }
-    if (!QProcess::startDetached(helper, {QStringLiteral("run"), attribute.trimmed()}))
-        setMessage(tr("Avvio del programma di prova non riuscito."));
-}
-void KrisNccBackend::removeSoftware(const QString &name) { startCommand(QStringLiteral("kris-app"), {QStringLiteral("remove"), name}, QStringLiteral("software-remove"), true); }
-void KrisNccBackend::previewSoftwareUpdates() { startCommand(QStringLiteral("kris-app"), {QStringLiteral("upgrade"), QStringLiteral("--dry-run")}, QStringLiteral("software-updates"), true); }
-void KrisNccBackend::refreshDistroboxes() { startCommand(QStringLiteral("distrobox"), {QStringLiteral("list"), QStringLiteral("--no-color")}, QStringLiteral("distrobox-list")); }
-void KrisNccBackend::refreshRecovery() { startCommand(QStringLiteral("nix-env"), {QStringLiteral("--list-generations"), QStringLiteral("-p"), QStringLiteral("/nix/var/nix/profiles/system")}, QStringLiteral("system-generations")); startCommand(QStringLiteral("kris-app"), {QStringLiteral("history")}, QStringLiteral("profile-history")); }
 
-bool KrisNccBackend::launchTool(const QString &toolId) const
+    if (m_searchProcess && m_searchProcess->state() != QProcess::NotRunning)
+        terminateProcessGroup(m_searchProcess, true);
+
+    ++m_searchSerial;
+    m_searchQuery = trimmed;
+    m_searchProcess = startCommand(QStringLiteral("kris-app"),
+                                   {QStringLiteral("search"), QStringLiteral("--json"), trimmed},
+                                   QStringLiteral("software-search:%1").arg(m_searchSerial));
+}
+
+void KrisNccBackend::addSoftware(const QString &attribute, bool allowUnfree)
+{
+    QStringList arguments{QStringLiteral("add")};
+    if (allowUnfree)
+        arguments << QStringLiteral("--unfree");
+    arguments << attribute;
+    startCommand(QStringLiteral("kris-app"), arguments, QStringLiteral("software-add"), true);
+}
+
+void KrisNccBackend::runSoftware(const QString &attribute, bool allowUnfree)
+{
+    QStringList arguments{QStringLiteral("run")};
+    if (allowUnfree)
+        arguments << QStringLiteral("--unfree");
+    arguments << attribute.trimmed();
+    startCommand(QStringLiteral("kris-app"), arguments, QStringLiteral("software-run"));
+}
+
+void KrisNccBackend::removeSoftware(const QString &name)
+{
+    startCommand(QStringLiteral("kris-app"),
+                 {QStringLiteral("remove"), name},
+                 QStringLiteral("software-remove"), true);
+}
+
+void KrisNccBackend::previewSoftwareUpdates(bool allowUnfree)
+{
+    QStringList arguments{QStringLiteral("upgrade"), QStringLiteral("--dry-run")};
+    if (allowUnfree)
+        arguments << QStringLiteral("--unfree");
+    startCommand(QStringLiteral("kris-app"), arguments, QStringLiteral("software-updates"), true);
+}
+
+void KrisNccBackend::refreshDistroboxes()
+{
+    startCommand(QStringLiteral("distrobox"),
+                 {QStringLiteral("list"), QStringLiteral("--no-color")},
+                 QStringLiteral("distrobox-list"));
+}
+
+void KrisNccBackend::refreshRecovery()
+{
+    startCommand(QStringLiteral("nix-env"),
+                 {QStringLiteral("--list-generations"), QStringLiteral("-p"),
+                  QStringLiteral("/nix/var/nix/profiles/system")},
+                 QStringLiteral("system-generations"));
+    startCommand(QStringLiteral("kris-app"), {QStringLiteral("history")}, QStringLiteral("profile-history"));
+}
+
+bool KrisNccBackend::launchTool(const QString &toolId)
 {
     static const QHash<QString, QString> tools = {
         {QStringLiteral("systemsettings"), QStringLiteral("systemsettings")},
@@ -306,6 +638,18 @@ bool KrisNccBackend::launchTool(const QString &toolId) const
         {QStringLiteral("konsole"), QStringLiteral("konsole")},
         {QStringLiteral("discover"), QStringLiteral("plasma-discover")}
     };
+    if (!tools.contains(toolId)) {
+        setMessage(tr("Strumento non riconosciuto: %1").arg(toolId));
+        return false;
+    }
     const QString program = QStandardPaths::findExecutable(tools.value(toolId));
-    return !program.isEmpty() && QProcess::startDetached(program, {});
+    if (program.isEmpty()) {
+        setMessage(tr("Strumento non disponibile: %1").arg(toolId));
+        return false;
+    }
+    if (!QProcess::startDetached(program, {})) {
+        setMessage(tr("Avvio dello strumento non riuscito: %1").arg(toolId));
+        return false;
+    }
+    return true;
 }

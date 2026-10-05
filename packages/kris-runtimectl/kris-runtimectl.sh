@@ -5,15 +5,19 @@ STATE_FILE="$STATE_DIR/runtime.conf"
 
 usage() {
   cat <<'USAGE'
-Usage:
+Uso:
   kris-runtimectl status [--json]
   kris-runtimectl is-on firewall
   kris-runtimectl firewall on|off
   kris-runtimectl bluetooth on|off
 
-Only the firewall master state is persisted in /var/lib/krisos/runtime.conf.
-Bluetooth is an immediate rfkill toggle; systemd-rfkill owns radio persistence.
-Mutating commands require root (normally through a narrow Polkit action).
+Solo lo stato generale del firewall viene persistito in
+/var/lib/krisos/runtime.conf.
+
+Lo stato Bluetooth resta nativo rfkill/BlueZ e non viene salvato
+da kris-runtimectl.
+
+I comandi di modifica richiedono privilegi amministrativi.
 USAGE
 }
 
@@ -26,6 +30,7 @@ need_root() {
 
 ensure_state() {
   install -d -m 0755 "$STATE_DIR"
+
   if [ ! -e "$STATE_FILE" ]; then
     printf 'FIREWALL=on\n' > "$STATE_FILE"
     chmod 0644 "$STATE_FILE"
@@ -34,24 +39,36 @@ ensure_state() {
 
 firewall_state() {
   value=""
+
   if [ -r "$STATE_FILE" ]; then
     value="$(sed -n 's/^FIREWALL=//p' "$STATE_FILE" | tail -n 1)" || value=""
   fi
+
   case "$value" in
     on|off) printf '%s\n' "$value" ;;
-    *) printf 'on\n' ;;
+    *)      printf 'on\n' ;;
   esac
 }
 
 set_firewall_state() {
   value="$1"
-  case "$value" in on|off) ;; *) echo "kris-runtimectl: valore non valido" >&2; exit 2 ;; esac
+
+  case "$value" in
+    on|off) ;;
+    *)
+      echo "kris-runtimectl: valore firewall non valido" >&2
+      exit 2
+      ;;
+  esac
+
   tmp="$(mktemp "$STATE_DIR/.runtime.conf.XXXXXX")"
   trap 'rm -f "$tmp"' EXIT
+
   printf 'FIREWALL=%s\n' "$value" > "$tmp"
   chmod 0644 "$tmp"
   chown root:root "$tmp"
   mv -f "$tmp" "$STATE_FILE"
+
   trap - EXIT
 }
 
@@ -64,6 +81,7 @@ apply_firewall() {
     echo "kris-runtimectl: firewalld non disponibile" >&2
     exit 69
   fi
+
   if [ "$(firewall_state)" = on ]; then
     systemctl start firewalld.service
   else
@@ -71,38 +89,35 @@ apply_firewall() {
   fi
 }
 
-set_bluetooth() {
+apply_bluetooth() {
   case "$1" in
-    on) rfkill unblock bluetooth ;;
-    off) rfkill block bluetooth ;;
-    *) echo "kris-runtimectl: valore non valido" >&2; exit 2 ;;
-  esac
-}
-
-bluetooth_state() {
-  if ! out="$(rfkill -n -o SOFT list bluetooth 2>/dev/null)"; then
-    echo unknown
-    return 0
-  fi
-  line="$(printf '%s\n' "$out" | head -n 1)"
-  case "$line" in
-    unblocked) echo on ;;
-    blocked) echo off ;;
-    *) echo absent ;;
+    on)
+      rfkill unblock bluetooth
+      timeout 15s bluetoothctl power on
+      ;;
+    off)
+      # Power BlueZ down first when a controller is available, then enforce the
+      # radio block. rfkill remains the final fail-safe for the OFF direction.
+      timeout 15s bluetoothctl power off >/dev/null 2>&1 || true
+      rfkill block bluetooth
+      ;;
+    *)
+      echo "kris-runtimectl: valore bluetooth non valido" >&2
+      exit 2
+      ;;
   esac
 }
 
 status_text() {
   printf 'firewall=%s\n' "$(firewall_state)"
-  printf 'bluetooth=%s\n' "$(bluetooth_state)"
 }
 
 status_json() {
-  printf '{"schema":1,"firewall":"%s","bluetooth":"%s"}\n' \
-    "$(firewall_state)" "$(bluetooth_state)"
+  printf '{"schema":1,"firewall":"%s"}\n' "$(firewall_state)"
 }
 
 cmd="${1:-}"
+
 case "$cmd" in
   status)
     if [ "${2:-}" = "--json" ]; then
@@ -113,25 +128,36 @@ case "$cmd" in
       status_text
     fi
     ;;
+
   is-on)
-    [ "$#" -eq 2 ] && [ "$2" = firewall ] || { usage >&2; exit 2; }
+    [ "$#" -eq 2 ] && [ "$2" = firewall ] || {
+      usage >&2
+      exit 2
+    }
+
     [ "$(firewall_state)" = on ]
     ;;
+
   firewall)
     need_root
     [ "$#" -eq 2 ] || { usage >&2; exit 2; }
+
     ensure_state
     set_firewall_state "$2"
     apply_firewall
     ;;
+
   bluetooth)
     need_root
     [ "$#" -eq 2 ] || { usage >&2; exit 2; }
-    set_bluetooth "$2"
+
+    apply_bluetooth "$2"
     ;;
+
   -h|--help|help)
     usage
     ;;
+
   *)
     usage >&2
     exit 2

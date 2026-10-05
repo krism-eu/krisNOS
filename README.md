@@ -1,130 +1,160 @@
-# krisNOS prototype v0.6
+# krisNOS
 
-Personal NixOS desktop architecture: **small declarative core + deliberately mutable daily-use layer**.
+Architettura desktop personale basata su NixOS:
 
-This is inspired by the useful parts of Xinux/SnowflakeOS (friendly ISO/software-management direction) but intentionally keeps the base close to upstream NixOS and avoids building a second distribution framework.
+**piccolo nucleo dichiarativo + stato quotidiano mutabile + centro di controllo krisNCC**
 
-## What is already designed
+Obiettivo: una singola macchina desktop personale x86_64 AMD, mantenendo il framework riutilizzabile separato dalla configurazione specifica del computer.
 
-### Declarative base
+## Architettura
 
-- NixOS 26.05 pin (via flake wrapper)
-- systemd-boot/UEFI
-- AMD/amdgpu target
-- Plasma 6 + SDDM Wayland
+### krisNOS
+
+`krisNOS` contiene il framework riutilizzabile del sistema:
+
+- NixOS 26.05
+- supporto AMD / amdgpu
+- Plasma 6 / Wayland
+- SDDM
 - NetworkManager
-- PipeWire/WirePlumber
-- Bluetooth/BlueZ
+- PipeWire / WirePlumber
+- BlueZ
 - CUPS
-- firewalld as supported NixOS firewall backend
+- firewalld
 - Flatpak
-- Distrobox (Podman rootless only as its hidden engine)
-- Polkit, D-Bus, udisks, upower
-- ZRAM + fstrim
-- no SSH server
-- small base package set
+- Distrobox con Podman rootless come motore sottostante
+- Polkit
+- ZRAM
+- fstrim
+- krisNCC
+- piccoli helper usati da krisNCC
 
-### Mutable layer
+Il framework non contiene la configurazione hardware personale della macchina.
 
-- personal software through `nix profile` (`kris-app`)
-- independent profile upgrade/history/rollback
-- everyday administration is explicitly broad: NetworkManager, firewalld, BlueZ, CUPS, PipeWire/WirePlumber, power profiles, Flatpak, Distrobox and Plasma keep their native mutable state
-- `/var/lib/krisos/runtime.conf` is only for narrow Kris policy where Nix would otherwise reassert a value; it is not the general configuration store
-- `kris-runtimectl` currently prototypes firewall master state and Bluetooth rfkill; the full backend ownership map is in `docs/MUTABILITY-MATRIX.md`
-- normal software stays in the user's Nix profile through `kris-app`
+### krisNOS-config
 
-## Important distinction
+`krisNOS-config` contiene la configurazione della macchina installata:
 
-The mutable layer is **not OverlayFS**. Nothing overlays `/nix/store`, and this prototype does not depend on the experimental writable `/etc` overlay.
+- `hardware-configuration.nix`
+- impostazioni specifiche dell'host
+- override strutturali
+- impostazioni Nix gestite da krisNCC
+- configurazione Nix personale libera
+- preferenze krisNCC portabili e non sensibili
 
-## Repository layout
+La dipendenza è unidirezionale:
 
-```text
-flake.nix                      build/pinning wrapper
-modules/                       reusable NixOS modules
-hosts/topton-fu02/             target machine settings
-profiles/live.nix              generic ISO/VM profile
-packages/kris-app/             user Nix-profile helper
-packages/kris-runtimectl/      allowlisted privileged runtime helper
-packages/kris-configctl/       safe local/GitHub configuration exchange
-docs/                          architecture and backend contracts
-scripts/                       local check/VM/ISO commands
-```
+    krisNOS-config
+          |
+          v
+       krisNOS
 
-## First use on a NixOS development machine
+## Stato mutabile quotidiano
 
-```bash
-git init && git add -A      # flakes only see Git-tracked files
-nix flake lock && git add flake.lock
-./scripts/check.sh
-./scripts/build-vm.sh
-./scripts/build-iso.sh
-```
+Lo stato normale del desktop resta affidato al componente che lo gestisce nativamente:
 
-Without `hosts/topton-fu02/hardware-configuration.nix` only the generic live configuration (`krisos-live`) and its check are exposed; `krisos-topton` appears once the real hardware file is tracked.
+- NetworkManager: connessioni, VPN e DNS
+- BlueZ / rfkill: stato Bluetooth
+- PipeWire / WirePlumber: stato audio
+- CUPS: stampanti
+- firewalld: zone, regole e servizi
+- power-profiles-daemon: profilo energetico
+- KDE: KConfig
+- Flatpak: applicazioni e relativo stato
+- Distrobox: ambienti Linux mutabili
+- `nix profile`: applicazioni Nix personali
 
-The live profile logs in automatically as `kris` (throwaway password `live`, passwordless sudo): live/VM only, not the installed host. `iso-installer` is the base NixOS installer image carrying this configuration (no Calamares); the installer flow is still to be decided (see `docs/NEXT.md`).
+Non esiste alcun overlay scrivibile generico sopra `/etc` o `/nix/store`.
 
-No GitHub Actions or release workflow is required. GitHub is designed as an optional versioned exchange point; see `docs/GITHUB-SYNC.md`.
+`/var/lib/krisos/runtime.conf` esiste soltanto per la piccola policy persistente relativa allo stato generale del firewall.
 
-## Before installing on the Topton
+## Struttura del repository
 
-Generate the real machine-specific hardware file:
+- `flake.nix`
+- `flake.lock`
+- `modules/`
+- `packages/`
+- `profiles/live.nix`
+- `krisncc/`
+- `docs/`
+- `scripts/`
 
-```bash
-sudo nixos-generate-config --show-hardware-config \
-  > hosts/topton-fu02/hardware-configuration.nix
-```
+Il framework non contiene più una copia duplicata della configurazione personale della macchina.
 
-Then inspect it manually and track it, otherwise the flake cannot see it:
+## Output principali
 
-```bash
-git add hosts/topton-fu02/hardware-configuration.nix
-```
+- `nix build .#krisNCC`
+- `nix build .#iso`
+- `nix build .#vm`
 
-The file is deliberately **not** in `.gitignore` (it is not secret, and an ignored file is invisible to the flake). Do not copy example filesystem UUIDs.
+ISO e VM sono output pesanti espliciti e non fanno parte dei normali controlli del flake.
 
-## Daily software examples
+## Stato verificato
 
-```bash
-kris-app search vlc
-kris-app add vlc
-kris-app add --unfree spotify   # unfree needs an explicit flag
-kris-app list
-kris-app remove vlc             # by element name, as shown by list
-kris-app upgrade --dry-run
-kris-app upgrade
-kris-app history
-kris-app rollback
-```
-
-These operations change the user's profile, **not the NixOS system generation**. `kris-app` refuses to run as root.
-
-## Runtime examples
-
-```bash
-kris-runtimectl status
-sudo kris-runtimectl firewall off
-sudo kris-runtimectl bluetooth on    # immediate rfkill, not persisted
-```
-
-A future krisNCC GUI should call these through a narrow Polkit interface rather than getting arbitrary root shell access.
-
-## Current status
-
-Architecture/scaffold only. v0.6 keeps Distrobox the user-facing container layer, keeps Podman as hidden plumbing, and formalizes the two-repository manual-sync model (see `docs/CHANGES-v0_5.md` and `docs/CHANGES-v0_6.md`); the two helper scripts were exercised with stubbed `systemctl`/`rfkill`/`nix`, but this environment does not contain Nix, so the project still requires its first real `nix flake check` and VM boot on a NixOS/Nix-enabled machine before it is installation-ready.
-
-
-## Repository model
-
-The intended GitHub layout is now explicit:
-
-- `krism-eu/krisNOS`: framework, modules, helpers and krisNCC contracts.
-- `krism-eu/krisNOS-config`: personal machine configuration exchanged manually through krisNCC.
-
-`krisNOS-config` is never pulled or applied automatically. No timer, boot hook or background sync is part of the design.
-See `docs/REPOSITORY-MODEL.md` and the separate `krisNOS-config-seed` scaffold.
+- `nix flake check --no-build`: PASS
+- build krisNCC: PASS
+- runtime offscreen krisNCC: PASS
+- valutazione derivazione ISO: PASS
+- valutazione derivazione VM: PASS
+- build completa ISO: PASS
+- avvio VM: non ancora verificato
+- installazione fisica: non ancora verificata
 
 ## krisNCC
 
-The current krisCC is treated as the UI asset, not as a backend to port unchanged. Fedora-specific DNF/RPM, `rk`, bootc and raw Podman pages are replaced by Nix profile, Nix generations, native runtime APIs and Distrobox. See `docs/KRISNCC-UI.md` and `docs/MIGRATION-TO-KRISNCC.md`.
+Aree principali:
+
+- Home
+- Sistema
+- App
+- Config
+- Ripristino
+- Strumenti
+
+krisNCC deve offrire molte funzioni utili mantenendo poca complessità personalizzata. Si preferiscono API e strumenti nativi invece di duplicare i meccanismi interni di NetworkManager, BlueZ, CUPS, firewalld, Nix, Flatpak o Distrobox.
+
+## Applicazioni personali
+
+Le normali applicazioni appartengono al profilo utente Nix o a Flatpak, non alla generazione del sistema.
+
+Esempi:
+
+- `kris-app search vlc`
+- `kris-app add vlc`
+- `kris-app add --unfree spotify`
+- `kris-app list`
+- `kris-app remove vlc`
+- `kris-app upgrade --dry-run`
+- `kris-app history`
+- `kris-app rollback`
+
+`--impure` viene utilizzato soltanto nel percorso esplicito per i pacchetti non liberi.
+
+## Helper runtime
+
+`kris-runtimectl` è volutamente molto limitato:
+
+- `kris-runtimectl status`
+- `sudo kris-runtimectl firewall off`
+- `sudo kris-runtimectl firewall on`
+- `sudo kris-runtimectl bluetooth off`
+- `sudo kris-runtimectl bluetooth on`
+
+Solo lo stato generale del firewall viene persistito da Kris.
+Per il Bluetooth l'helper espone esclusivamente la mutazione privilegiata della radio tramite rfkill; stato, pairing e dispositivi restano di proprietà BlueZ/rfkill.
+
+`kris-system-activate` registra e attiva esclusivamente un toplevel NixOS già costruito; krisNCC lo invoca tramite `sudo -n` nella policy amministrativa passwordless iniziale dell'host.
+
+## Modello GitHub
+
+La sincronizzazione con GitHub è opzionale e sempre manuale.
+
+Non esistono:
+
+- timer
+- pull automatici all'avvio
+- sincronizzazione automatica
+- applicazione automatica della configurazione
+- polling in background
+
+Le modifiche di sviluppo vengono prima verificate completamente in locale e solo successivamente inviate ai repository.

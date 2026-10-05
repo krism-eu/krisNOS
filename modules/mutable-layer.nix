@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 let
   runtimectl = pkgs.callPackage ../packages/kris-runtimectl { };
 in
