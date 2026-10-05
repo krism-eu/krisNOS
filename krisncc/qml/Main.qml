@@ -1,0 +1,139 @@
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls as Controls
+import org.kde.kirigami as Kirigami
+import org.krisncc
+
+Kirigami.ApplicationWindow {
+    id: root
+    width: 1280
+    height: 820
+    minimumWidth: 920
+    minimumHeight: 640
+    visible: true
+    title: qsTr("krisNCC")
+    palette.highlight: Qt.darker(Kirigami.Theme.highlightColor, 1.12)
+    property int currentSection: 0
+
+    readonly property var navigationModel: [
+        { section: 0, label: qsTr("Dashboard"), icon: "go-home" },
+        { section: 1, label: qsTr("Sistema"), icon: "computer" },
+        { section: 2, label: qsTr("Software"), icon: "package-x-generic" },
+        { section: 3, label: qsTr("Distrobox"), icon: "container" },
+        { section: 4, label: qsTr("Configurazione"), icon: "settings-configure" },
+        { section: 5, label: qsTr("Recovery"), icon: "edit-undo" },
+        { section: 6, label: qsTr("Strumenti"), icon: "tools-wizard" }
+    ]
+
+    function showIndex(index) { if (index >= 0 && index <= 6) currentSection = index }
+    function sectionTitle(index) {
+        for (let i = 0; i < navigationModel.length; ++i)
+            if (navigationModel[i].section === index) return navigationModel[i].label
+        return qsTr("krisNCC")
+    }
+
+    onClosing: function(close) {
+        if (KrisBackend.busy) {
+            close.accepted = false
+            busyDialog.open()
+        }
+    }
+
+    pageStack.globalToolBar.style: Kirigami.ApplicationHeaderStyle.None
+    pageStack.initialPage: Kirigami.Page {
+        padding: 0
+        RowLayout {
+            anchors.fill: parent
+            spacing: 0
+
+            Rectangle {
+                Layout.preferredWidth: root.width < 1080 ? 205 : 228
+                Layout.fillHeight: true
+                color: Kirigami.Theme.alternateBackgroundColor
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: Kirigami.Units.largeSpacing
+                    spacing: Kirigami.Units.smallSpacing
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.bottomMargin: Kirigami.Units.largeSpacing
+                        Controls.Label { text: qsTr("krisNCC"); font.bold: true; font.pointSize: Kirigami.Theme.defaultFont.pointSize + 4 }
+                        Controls.Label { text: qsTr("Control Center · krisNOS"); opacity: UiMetrics.secondaryOpacity }
+                    }
+                    Repeater {
+                        model: root.navigationModel
+                        delegate: Controls.ItemDelegate {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 46
+                            checkable: true
+                            checked: root.currentSection === modelData.section
+                            onClicked: root.showIndex(modelData.section)
+                            contentItem: RowLayout {
+                                spacing: Kirigami.Units.largeSpacing
+                                Kirigami.Icon { Layout.preferredWidth: 22; Layout.preferredHeight: 22; source: modelData.icon; color: parent.parent.checked ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor }
+                                Controls.Label { Layout.fillWidth: true; text: modelData.label; font.bold: true; font.pointSize: Kirigami.Theme.defaultFont.pointSize + 1; color: parent.parent.checked ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor }
+                            }
+                            background: Rectangle {
+                                radius: 9
+                                color: parent.checked ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12) : parent.hovered ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05) : "transparent"
+                                Rectangle { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; width: 3; height: parent.height - 12; radius: 2; visible: parent.parent.checked; color: Kirigami.Theme.highlightColor }
+                            }
+                        }
+                    }
+                    Item { Layout.fillHeight: true }
+                    Controls.Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: qsTr("Nessuna sincronizzazione o applicazione automatica"); opacity: UiMetrics.secondaryOpacity; font.pointSize: Kirigami.Theme.defaultFont.pointSize - 1 }
+                }
+            }
+
+            Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.10) }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                spacing: 0
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 72
+                    color: Kirigami.Theme.backgroundColor
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: UiMetrics.pageMargin
+                        anchors.rightMargin: UiMetrics.pageMargin
+                        Controls.Label { Layout.fillWidth: true; text: root.sectionTitle(root.currentSection); font.bold: true; font.pointSize: Kirigami.Theme.defaultFont.pointSize + 3 }
+                        Controls.BusyIndicator { running: KrisBackend.busy; visible: running; Layout.preferredWidth: 28; Layout.preferredHeight: 28 }
+                        Controls.Label { text: qsTr("v%1").arg(Qt.application.version); opacity: UiMetrics.secondaryOpacity }
+                    }
+                }
+                StackLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    currentIndex: root.currentSection
+                    Loader { Layout.fillWidth: true; Layout.fillHeight: true; property bool visited: false; active: visited || root.currentSection === 0; onLoaded: visited = true; sourceComponent: Component { DashboardModule { onOpenRequested: function(i) { root.showIndex(i) } } } }
+                    Loader { Layout.fillWidth: true; Layout.fillHeight: true; property bool visited: false; active: visited || root.currentSection === 1; onLoaded: visited = true; sourceComponent: Component { SystemModule {} } }
+                    Loader { Layout.fillWidth: true; Layout.fillHeight: true; property bool visited: false; active: visited || root.currentSection === 2; onLoaded: visited = true; sourceComponent: Component { SoftwareModule {} } }
+                    Loader { Layout.fillWidth: true; Layout.fillHeight: true; property bool visited: false; active: visited || root.currentSection === 3; onLoaded: visited = true; sourceComponent: Component { DistroboxModule {} } }
+                    Loader { Layout.fillWidth: true; Layout.fillHeight: true; property bool visited: false; active: visited || root.currentSection === 4; onLoaded: visited = true; sourceComponent: Component { ConfigurationModule {} } }
+                    Loader { Layout.fillWidth: true; Layout.fillHeight: true; property bool visited: false; active: visited || root.currentSection === 5; onLoaded: visited = true; sourceComponent: Component { RecoveryModule {} } }
+                    Loader { Layout.fillWidth: true; Layout.fillHeight: true; property bool visited: false; active: visited || root.currentSection === 6; onLoaded: visited = true; sourceComponent: Component { ToolsModule {} } }
+                }
+                Kirigami.InlineMessage {
+                    Layout.fillWidth: true
+                    Layout.margins: Kirigami.Units.smallSpacing
+                    visible: KrisBackend.lastMessage.length > 0
+                    text: KrisBackend.lastMessage
+                    type: Kirigami.MessageType.Information
+                }
+            }
+        }
+    }
+
+    Controls.Dialog {
+        id: busyDialog
+        modal: true
+        anchors.centerIn: parent
+        title: qsTr("Operazione in corso")
+        standardButtons: Controls.Dialog.Close
+        contentItem: Controls.Label { text: qsTr("krisNCC non viene chiuso durante una modifica avviata dall'utente."); wrapMode: Text.WordWrap }
+    }
+}
