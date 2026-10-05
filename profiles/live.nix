@@ -1,5 +1,11 @@
 { config, lib, pkgs, modulesPath, ... }:
 {
+  # Use NixOS' official installation-media base. It provides the ISO-specific
+  # filesystem layout instead of requiring a real host root filesystem.
+  imports = [
+    "${modulesPath}/installer/cd-dvd/installation-cd-base.nix"
+  ];
+
   krisos = {
     userName = "kris";
     hostName = "krisos-live";

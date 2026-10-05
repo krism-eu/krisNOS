@@ -19,8 +19,9 @@
   # normal mutable CUPS state; we do not maintain a second KrisOS on/off state.
   services.printing.enable = true;
 
-  # Since NixOS 25.11 firewalld can be the NixOS firewall backend. This gives
-  # us a supported runtime API instead of editing firewall rules in Nix.
+  # firewalld uses nftables by default on current NixOS. Enable the nftables
+  # infrastructure explicitly, as required by the NixOS firewalld backend.
+  networking.nftables.enable = true;
   networking.firewall = {
     enable = true;
     backend = "firewalld";
