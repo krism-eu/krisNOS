@@ -3,10 +3,14 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
+    icicle = {
+      url = "github:snowfallorg/icicle";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
-    { self, nixpkgs }:
+    { self, nixpkgs, icicle }:
     let
       system = "x86_64-linux";
       lib = nixpkgs.lib;
@@ -14,14 +18,16 @@
 
       krisosModule = import ./modules;
 
-      # Generic live configuration. Image/VM-specific modules are applied
-      # through system.build.images / system.build.vm rather than pretending
-      # this is an installed physical host.
+      # Generic live configuration. Icicle is included only in the live image;
+      # the installed system is generated from installer/icicle templates and
+      # imports the reusable krisNOS module.
       liveSystem = lib.nixosSystem {
         inherit system;
+        specialArgs = { inherit icicle; };
         modules = [
           krisosModule
           ./profiles/live.nix
+          ./profiles/icicle-installer.nix
         ];
       };
     in
