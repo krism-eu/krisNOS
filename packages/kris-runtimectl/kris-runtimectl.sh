@@ -137,7 +137,7 @@ status_text() {
 }
 
 status_json() {
-  printf '{"schema":2,"firewall":"%s","firewallPolicy":"%s"}\n' \
+  printf '{"schema":1,"firewall":"%s","firewallPolicy":"%s"}\n' \
     "$(firewall_runtime_state)" "$(firewall_state)"
 }
 

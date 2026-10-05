@@ -18,7 +18,7 @@ in
 
     autoLogin = mkOption {
       type = types.bool;
-      default = true;
+      default = false;
       description = "Enable SDDM autologin for the primary user.";
     };
 

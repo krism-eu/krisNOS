@@ -149,7 +149,7 @@ status_json() {
       behind: $behind,
       host: $host,
       appliedCommit: $appliedCommit,
-      appliedToplevel: $appliedToplevel,
+      appliedToplevel: $applied_toplevel,
       appliedAt: $appliedAt,
       currentToplevel: $currentToplevel
     }'
@@ -317,16 +317,34 @@ prepare_apply_json() (
 )
 
 record_applied() {
-  local commit="$1" toplevel="$2" current
+  local commit="$1" toplevel="$2" current current_head="" dirty=""
   case "$commit" in
     (*[!0-9a-f]*|'') die "commit applicato non valido" ;;
   esac
   [ "${#commit}" -eq 40 ] || die "commit applicato non valido"
-  require_clean
-  [ "$(head_sha)" = "$commit" ] || die "HEAD non coincide con il commit costruito"
+
   toplevel="$(readlink -f -- "$toplevel" 2>/dev/null || true)"
   current="$(current_system)"
-  [ -n "$toplevel" ] && [ "$current" = "$toplevel" ] || die "il sistema corrente non coincide con il toplevel appena applicato"
+  [ -n "$toplevel" ] && [ "$current" = "$toplevel" ] \
+    || die "il sistema corrente non coincide con il toplevel appena applicato"
+
+  # Dopo uno switch riuscito /run/current-system e' la prova autorevole.
+  # Il repo puo' essere cambiato nel frattempo: segnaliamolo senza perdere
+  # la provenienza del toplevel che e' stato realmente attivato.
+  if [ -d "$REPO/.git" ]; then
+    current_head="$(head_sha 2>/dev/null || true)"
+    dirty="$(dirty_flag 2>/dev/null || true)"
+    if [ -n "$current_head" ] && [ "$current_head" != "$commit" ]; then
+      printf 'kris-configctl: avviso: HEAD è cambiato dopo la build; registro comunque il commit applicato %s\n' \
+        "$commit" >&2
+    fi
+    if [ "$dirty" = true ]; then
+      printf '%s\n' 'kris-configctl: avviso: working tree modificato dopo la build; il toplevel applicato resta registrato.' >&2
+    fi
+  else
+    printf '%s\n' 'kris-configctl: avviso: repo non disponibile dopo lo switch; registro il toplevel applicato verificato.' >&2
+  fi
+
   mkdir -p "$STATE_DIR"
   printf 'commit=%s\ntoplevel=%s\napplied_at=%s\n' \
     "$commit" "$toplevel" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$STATE_FILE"
@@ -388,7 +406,7 @@ case "$cmd" in
     ;;
   record-applied)
     [ "$#" -eq 3 ] || { usage >&2; exit 2; }
-    need git; repo_ok; record_applied "$2" "$3"
+    record_applied "$2" "$3"
     ;;
   apply) [ "$#" -eq 1 ] || { usage >&2; exit 2; }; need git; repo_ok; apply_config ;;
   -h|--help|help|'') usage ;;

@@ -20,7 +20,7 @@
     enableQt5Integration = false;
   };
 
-  services.xserver.xkb.layout = "it";
+  services.xserver.xkb.layout = lib.mkDefault "it";
 
   # Manteniamo tutto il core Plasma richiesto da NixOS.
   # Escludiamo solo applicazioni/funzionalita opzionali che non vogliamo

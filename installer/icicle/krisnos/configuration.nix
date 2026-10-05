@@ -3,15 +3,12 @@
   imports = [ ./hardware-configuration.nix ];
 
   # Icicle owns installation-time choices. krisNOS supplies the reusable base.
-  krisos = {
-    userName = "@USERNAME@";
-    hostName = "@HOSTNAME@";
-    autoLogin = false;
-    bluetoothPowerOnBoot = false;
-    flatpak = true;
-    distrobox = true;
-    mutableRuntime = true;
-  };
+  krisos.userName = "@USERNAME@";
+  krisos.hostName = "@HOSTNAME@";
+  krisos.bluetoothPowerOnBoot = false;
+  krisos.flatpak = true;
+  krisos.distrobox = true;
+  krisos.mutableRuntime = true;
 
 @NETWORK@
 
