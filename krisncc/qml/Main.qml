@@ -16,16 +16,15 @@ Kirigami.ApplicationWindow {
     property int currentSection: 0
 
     readonly property var navigationModel: [
-        { section: 0, label: qsTr("Dashboard"), icon: "go-home" },
+        { section: 0, label: qsTr("Home"), icon: "go-home" },
         { section: 1, label: qsTr("Sistema"), icon: "computer" },
-        { section: 2, label: qsTr("Software"), icon: "package-x-generic" },
-        { section: 3, label: qsTr("Distrobox"), icon: "container" },
-        { section: 4, label: qsTr("Configurazione"), icon: "settings-configure" },
-        { section: 5, label: qsTr("Recovery"), icon: "edit-undo" },
-        { section: 6, label: qsTr("Strumenti"), icon: "tools-wizard" }
+        { section: 2, label: qsTr("App"), icon: "package-x-generic" },
+        { section: 3, label: qsTr("Config"), icon: "settings-configure" },
+        { section: 4, label: qsTr("Ripristino"), icon: "edit-undo" },
+        { section: 5, label: qsTr("Strumenti"), icon: "tools-wizard" }
     ]
 
-    function showIndex(index) { if (index >= 0 && index <= 6) currentSection = index }
+    function showIndex(index) { if (index >= 0 && index < navigationModel.length) currentSection = index }
     function sectionTitle(index) {
         for (let i = 0; i < navigationModel.length; ++i)
             if (navigationModel[i].section === index) return navigationModel[i].label
@@ -82,7 +81,7 @@ Kirigami.ApplicationWindow {
                         }
                     }
                     Item { Layout.fillHeight: true }
-                    Controls.Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: qsTr("Nessuna sincronizzazione o applicazione automatica"); opacity: UiMetrics.secondaryOpacity; font.pointSize: Kirigami.Theme.defaultFont.pointSize - 1 }
+                    Controls.Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: qsTr("Sync e applicazione sempre manuali"); opacity: UiMetrics.secondaryOpacity; font.pointSize: Kirigami.Theme.defaultFont.pointSize - 1 }
                 }
             }
 
@@ -109,13 +108,12 @@ Kirigami.ApplicationWindow {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     currentIndex: root.currentSection
-                    Loader { Layout.fillWidth: true; Layout.fillHeight: true; property bool visited: false; active: visited || root.currentSection === 0; onLoaded: visited = true; sourceComponent: Component { DashboardModule { onOpenRequested: function(i) { root.showIndex(i) } } } }
-                    Loader { Layout.fillWidth: true; Layout.fillHeight: true; property bool visited: false; active: visited || root.currentSection === 1; onLoaded: visited = true; sourceComponent: Component { SystemModule {} } }
-                    Loader { Layout.fillWidth: true; Layout.fillHeight: true; property bool visited: false; active: visited || root.currentSection === 2; onLoaded: visited = true; sourceComponent: Component { SoftwareModule {} } }
-                    Loader { Layout.fillWidth: true; Layout.fillHeight: true; property bool visited: false; active: visited || root.currentSection === 3; onLoaded: visited = true; sourceComponent: Component { DistroboxModule {} } }
-                    Loader { Layout.fillWidth: true; Layout.fillHeight: true; property bool visited: false; active: visited || root.currentSection === 4; onLoaded: visited = true; sourceComponent: Component { ConfigurationModule {} } }
-                    Loader { Layout.fillWidth: true; Layout.fillHeight: true; property bool visited: false; active: visited || root.currentSection === 5; onLoaded: visited = true; sourceComponent: Component { RecoveryModule {} } }
-                    Loader { Layout.fillWidth: true; Layout.fillHeight: true; property bool visited: false; active: visited || root.currentSection === 6; onLoaded: visited = true; sourceComponent: Component { ToolsModule {} } }
+                    Loader { Layout.fillWidth: true; Layout.fillHeight: true; active: root.currentSection === 0; sourceComponent: Component { DashboardModule { onOpenRequested: function(i) { root.showIndex(i) } } } }
+                    Loader { Layout.fillWidth: true; Layout.fillHeight: true; active: root.currentSection === 1; sourceComponent: Component { SystemModule {} } }
+                    Loader { Layout.fillWidth: true; Layout.fillHeight: true; active: root.currentSection === 2; sourceComponent: Component { SoftwareModule {} } }
+                    Loader { Layout.fillWidth: true; Layout.fillHeight: true; active: root.currentSection === 3; sourceComponent: Component { ConfigurationModule {} } }
+                    Loader { Layout.fillWidth: true; Layout.fillHeight: true; active: root.currentSection === 4; sourceComponent: Component { RecoveryModule {} } }
+                    Loader { Layout.fillWidth: true; Layout.fillHeight: true; active: root.currentSection === 5; sourceComponent: Component { ToolsModule {} } }
                 }
                 Kirigami.InlineMessage {
                     Layout.fillWidth: true

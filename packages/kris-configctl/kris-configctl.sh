@@ -13,6 +13,7 @@ Usage:
   kris-configctl init [git-url]
   kris-configctl status [--json]
   kris-configctl fetch
+  kris-configctl diff
   kris-configctl pull
   kris-configctl push
   kris-configctl sync
@@ -27,23 +28,18 @@ Environment:
 
 Safety rules:
 - synchronization is never automatic;
-- never force-pushes;
-- never auto-merges diverged histories;
+- never force-pushes or auto-merges diverged histories;
 - never overwrites a dirty working tree;
 - pull is fast-forward only;
-- apply validates/builds before switching.
+- build validates first and does not need root;
+- apply is separate and validates before switching.
 USAGE
 }
 
 die() { printf 'kris-configctl: %s\n' "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "comando richiesto non trovato: $1"; }
-
-repo_ok() {
-  [ -d "$REPO/.git" ] || die "repo locale non inizializzato: $REPO"
-}
-
+repo_ok() { [ -d "$REPO/.git" ] || die "repo locale non inizializzato: $REPO"; }
 gitc() { git -C "$REPO" "$@"; }
-
 branch_name() { gitc symbolic-ref --quiet --short HEAD 2>/dev/null || printf 'DETACHED\n'; }
 head_sha() { gitc rev-parse --verify HEAD; }
 upstream_name() { gitc rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true; }
@@ -59,29 +55,30 @@ ahead_behind() {
   gitc rev-list --left-right --count "HEAD...$up" | awk '{print $1, $2}'
 }
 
+state_value() {
+  local key="$1"
+  [ -r "$STATE_FILE" ] || return 0
+  sed -n "s/^${key}=//p" "$STATE_FILE" | tail -n 1
+}
+
 status_json() {
-  local branch head up dirty ahead behind
+  local branch head up dirty ahead behind applied applied_at
   branch="$(branch_name)"; head="$(head_sha)"; up="$(upstream_name)"; dirty="$(dirty_flag)"
   read -r ahead behind < <(ahead_behind)
-  printf '{"schema":1,"repo":"%s","branch":"%s","head":"%s","upstream":"%s","dirty":%s,"ahead":%s,"behind":%s,"host":"%s"}\n' \
-    "${REPO//\"/\\\"}" "${branch//\"/\\\"}" "$head" "${up//\"/\\\"}" "$dirty" "$ahead" "$behind" "${HOST//\"/\\\"}"
+  applied="$(state_value commit || true)"; applied_at="$(state_value applied_at || true)"
+  printf '{"schema":2,"repo":"%s","branch":"%s","head":"%s","upstream":"%s","dirty":%s,"ahead":%s,"behind":%s,"host":"%s","appliedCommit":"%s","appliedAt":"%s"}\n' \
+    "${REPO//\"/\\\"}" "${branch//\"/\\\"}" "$head" "${up//\"/\\\"}" "$dirty" "$ahead" "$behind" "${HOST//\"/\\\"}" "${applied//\"/\\\"}" "${applied_at//\"/\\\"}"
 }
 
 status_text() {
   local ahead behind
   read -r ahead behind < <(ahead_behind)
-  printf 'repo=%s\n' "$REPO"
-  printf 'branch=%s\n' "$(branch_name)"
-  printf 'head=%s\n' "$(head_sha)"
-  printf 'upstream=%s\n' "$(upstream_name)"
-  printf 'dirty=%s\n' "$(dirty_flag)"
-  printf 'ahead=%s\nbehind=%s\n' "$ahead" "$behind"
-  printf 'host=%s\n' "$HOST"
+  printf 'repo=%s\nbranch=%s\nhead=%s\nupstream=%s\ndirty=%s\n' "$REPO" "$(branch_name)" "$(head_sha)" "$(upstream_name)" "$(dirty_flag)"
+  printf 'ahead=%s\nbehind=%s\nhost=%s\n' "$ahead" "$behind" "$HOST"
+  printf 'appliedCommit=%s\nappliedAt=%s\n' "$(state_value commit || true)" "$(state_value applied_at || true)"
 }
 
-require_clean() {
-  [ "$(dirty_flag)" = false ] || die "working tree modificato: commit/stash/ripristina prima della sync"
-}
+require_clean() { [ "$(dirty_flag)" = false ] || die "working tree modificato: commit/stash/ripristina prima della sync"; }
 
 fetch_remote() {
   local up
@@ -90,18 +87,38 @@ fetch_remote() {
   gitc fetch --prune --tags
 }
 
+show_diff() {
+  local up ahead behind shown=0
+  if [ "$(dirty_flag)" = true ]; then
+    printf '=== Modifiche locali non committate ===\n'
+    gitc diff --no-ext-diff --no-color
+    gitc diff --cached --no-ext-diff --no-color
+    shown=1
+  fi
+  up="$(upstream_name)"
+  if [ -n "$up" ]; then
+    read -r ahead behind < <(ahead_behind)
+    if [ "$behind" -gt 0 ]; then
+      printf '%s\n' '=== Modifiche presenti su GitHub ==='
+      gitc diff --no-ext-diff --no-color "HEAD..$up"
+      shown=1
+    fi
+    if [ "$ahead" -gt 0 ]; then
+      printf '%s\n' '=== Modifiche locali già committate da inviare ==='
+      gitc diff --no-ext-diff --no-color "$up..HEAD"
+      shown=1
+    fi
+  fi
+  [ "$shown" -eq 1 ] || printf 'Nessuna differenza da mostrare.\n'
+}
+
 safe_pull() {
   local up ahead behind
   require_clean
   up="$(upstream_name)"; [ -n "$up" ] || die "nessun upstream configurato"
   read -r ahead behind < <(ahead_behind)
-  if [ "$ahead" -gt 0 ] && [ "$behind" -gt 0 ]; then
-    die "storia divergente: nessun merge automatico"
-  fi
-  if [ "$behind" -eq 0 ]; then
-    printf 'Già aggiornato.\n'
-    return
-  fi
+  if [ "$ahead" -gt 0 ] && [ "$behind" -gt 0 ]; then die "storia divergente: nessun merge automatico"; fi
+  if [ "$behind" -eq 0 ]; then printf 'Già aggiornato.\n'; return; fi
   [ "$ahead" -eq 0 ] || die "branch locale avanti: pull automatico rifiutato"
   gitc merge --ff-only "$up"
 }
@@ -113,10 +130,7 @@ safe_push() {
   gitc fetch --prune
   read -r ahead behind < <(ahead_behind)
   [ "$behind" -eq 0 ] || die "remote più avanti o divergente: sincronizza prima di push"
-  if [ "$ahead" -eq 0 ]; then
-    printf 'Niente da inviare.\n'
-    return
-  fi
+  if [ "$ahead" -eq 0 ]; then printf 'Niente da inviare.\n'; return; fi
   gitc push
 }
 
@@ -146,9 +160,7 @@ mode() {
 validate_config() {
   need nix
   case "$(mode)" in
-    flake)
-      nix eval --raw "$REPO#nixosConfigurations.$HOST.config.system.build.toplevel.drvPath" >/dev/null
-      ;;
+    flake) nix eval --raw "$REPO#nixosConfigurations.$HOST.config.system.build.toplevel.drvPath" >/dev/null ;;
     classic)
       need nix-instantiate
       nix-instantiate '<nixpkgs/nixos>' -A system -I "nixos-config=$REPO/configuration.nix" >/dev/null
@@ -158,12 +170,17 @@ validate_config() {
 }
 
 build_config() {
-  need nixos-rebuild
   validate_config
   case "$(mode)" in
-    flake) sudo nixos-rebuild build --flake "$REPO#$HOST" ;;
-    classic) sudo nixos-rebuild build -I "nixos-config=$REPO/configuration.nix" ;;
+    flake)
+      nix build --no-link "$REPO#nixosConfigurations.$HOST.config.system.build.toplevel"
+      ;;
+    classic)
+      need nix-build
+      nix-build '<nixpkgs/nixos>' -A system -I "nixos-config=$REPO/configuration.nix" --no-out-link
+      ;;
   esac
+  printf 'Build OK. Nessuna modifica applicata al sistema.\n'
 }
 
 record_applied() {
@@ -195,34 +212,14 @@ case "$cmd" in
     need git; repo_ok
     if [ "${2:-}" = --json ]; then status_json; else status_text; fi
     ;;
-  fetch)
-    [ "$#" -eq 1 ] || { usage >&2; exit 2; }
-    need git; repo_ok; fetch_remote
-    ;;
-  pull)
-    [ "$#" -eq 1 ] || { usage >&2; exit 2; }
-    need git; repo_ok; fetch_remote; safe_pull
-    ;;
-  push)
-    [ "$#" -eq 1 ] || { usage >&2; exit 2; }
-    need git; repo_ok; safe_push
-    ;;
-  sync)
-    [ "$#" -eq 1 ] || { usage >&2; exit 2; }
-    need git; repo_ok; safe_sync
-    ;;
-  validate)
-    [ "$#" -eq 1 ] || { usage >&2; exit 2; }
-    need git; repo_ok; validate_config
-    ;;
-  build)
-    [ "$#" -eq 1 ] || { usage >&2; exit 2; }
-    need git; repo_ok; build_config
-    ;;
-  apply)
-    [ "$#" -eq 1 ] || { usage >&2; exit 2; }
-    need git; repo_ok; require_clean; apply_config
-    ;;
+  fetch) [ "$#" -eq 1 ] || { usage >&2; exit 2; }; need git; repo_ok; fetch_remote ;;
+  diff) [ "$#" -eq 1 ] || { usage >&2; exit 2; }; need git; repo_ok; show_diff ;;
+  pull) [ "$#" -eq 1 ] || { usage >&2; exit 2; }; need git; repo_ok; fetch_remote; safe_pull ;;
+  push) [ "$#" -eq 1 ] || { usage >&2; exit 2; }; need git; repo_ok; safe_push ;;
+  sync) [ "$#" -eq 1 ] || { usage >&2; exit 2; }; need git; repo_ok; safe_sync ;;
+  validate) [ "$#" -eq 1 ] || { usage >&2; exit 2; }; need git; repo_ok; validate_config ;;
+  build) [ "$#" -eq 1 ] || { usage >&2; exit 2; }; need git; repo_ok; build_config ;;
+  apply) [ "$#" -eq 1 ] || { usage >&2; exit 2; }; need git; repo_ok; require_clean; apply_config ;;
   -h|--help|help|'') usage ;;
   *) usage >&2; exit 2 ;;
 esac

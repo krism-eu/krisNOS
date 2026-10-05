@@ -1,44 +1,46 @@
-# krisNCC backend contract — first draft
+# krisNCC backend contract
 
 ## Principle
 
-Every GUI action must map to one explicit backend and one ownership domain. No mixed ownership.
+Every GUI action maps to one explicit backend and one ownership domain. krisNCC orchestrates native components; it does not become a second implementation of them.
 
-| GUI area | Backend | Rebuild? |
+| GUI function | Backend | Rebuild? |
 |---|---|---:|
-| Personal Nix software | `nix profile` via `kris-app` | No |
-| Flatpak | `flatpak` | No |
-| Distrobox environments | Distrobox (Podman rootless engine hidden below) | No |
+| Nix user apps | `nix profile` via `kris-app` | No |
+| Try Nix app | `nix run` via `kris-app` | No |
+| Flatpak apps | `flatpak` | No |
+| Distrobox environments | Distrobox; engine hidden | No |
 | Firewall rules/zones | firewalld | No |
 | Firewall master state | `kris-runtimectl` | No |
-| Wi-Fi/VPN/connections | NetworkManager | No |
-| Bluetooth pairing / power policy | BlueZ (`powerOnBoot` in NixOS) | No |
-| Bluetooth radio on/off | `kris-runtimectl bluetooth` (immediate rfkill, not persisted) | No |
-| Printers / queues | CUPS | No |
-| KDE/application settings | user config/native APIs | No |
-| Kernel/boot/base services | NixOS configuration | Yes |
-| Base upgrade | pinned Nixpkgs + NixOS rebuild | Yes |
+| Wi-Fi/VPN/DNS | NetworkManager | No |
+| Bluetooth pairing/devices | BlueZ | No |
+| Bluetooth radio | BlueZ/rfkill via `kris-runtimectl` | No |
+| Printers/queues | CUPS | No |
+| Audio/routing | PipeWire/WirePlumber | No |
+| Power profile | power-profiles-daemon | No |
+| Runtime services/logs | systemd | No |
+| Curated structural settings | `krisNOS-config/modules/krisncc-managed.nix` | Yes |
+| Kernel/boot/base integration | NixOS | Yes |
 
 ## Privilege split
 
-- `kris-app`: user only; refuses to run as root (exit 77). Unfree packages require `add --unfree`.
-- `kris-runtimectl`: tiny root helper with a fixed allowlist. `status` and `is-on` are read-only and safe as a normal user; mutating commands exit 77 without root.
-- Future GUI: prefer Polkit-mediated dedicated actions instead of unrestricted shell execution.
-- NixOS rebuild remains a separate, deliberate administrative workflow.
+- `kris-app` is user-only and refuses root.
+- `kris-configctl diff/validate/build` are user operations. Build uses `nix build --no-link`; it does not need root and does not change the running system.
+- `kris-runtimectl` is a small root helper with an explicit command allowlist. The bootstrap invokes it through resolved `pkexec` arguments for Bluetooth/firewall mutations; no shell string is executed.
+- Final NixOS activation will be exposed only after a dedicated narrow Polkit path is in place. The GUI must not hide `sudo` inside a background process.
 
-## Output requirements for GUI integration
+## Stable output
 
-`kris-runtimectl status --json` now returns stable `schema: 1`; `kris-app list --json` delegates to Nix JSON. A later pass should define one normalized krisNCC-facing JSON schema for package search/list/history instead of exposing raw Nix output.
+- `kris-runtimectl status --json`: schema 1.
+- `kris-configctl status --json`: schema 2, including last-applied commit metadata.
+- `kris-app list --json`: currently follows the Nix profile JSON shape (`version` + `elements`).
 
+Before the Software page becomes a stable public contract, package search/list/history should be normalized behind krisNCC rather than coupling QML permanently to experimental Nix JSON.
 
-## Distrobox UI rule
+## Distrobox rule
 
-The GUI exposes environments, not the container engine:
+The UI exposes environments, not raw container-engine concepts. Operations use Distrobox commands with validated names/image references. Raw Podman image/network/container management is intentionally not part of normal krisNCC.
 
-- create a distrobox from an allowlisted/explicit OCI image;
-- list/start/stop/remove distroboxes;
-- enter in Konsole;
-- upgrade a selected distrobox;
-- list/export graphical applications where Distrobox supports it.
+## Failure rule
 
-Raw Podman images/networks/containers are not a normal krisNCC page. Podman remains replaceable implementation detail. Distrobox itself supports Podman, Docker or Lilipod, so this boundary avoids coupling the GUI to one engine.
+A failed backend command must leave native state as the source of truth, surface a useful message and refresh the affected view. No operation may silently manufacture a second krisNCC state to pretend success.

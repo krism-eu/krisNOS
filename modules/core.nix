@@ -2,9 +2,11 @@
 {
   networking.hostName = config.krisos.hostName;
 
-  time.timeZone = "Europe/Rome";
-  i18n.defaultLocale = "it_IT.UTF-8";
-  console.keyMap = "it2";
+  # These are safe defaults, not hard locks. Personal structural configuration
+  # may override them from krisNOS-config without fighting the framework.
+  time.timeZone = lib.mkDefault "Europe/Rome";
+  i18n.defaultLocale = lib.mkDefault "it_IT.UTF-8";
+  console.keyMap = lib.mkDefault "it2";
 
   nix.settings = {
     experimental-features = [ "nix-command" "flakes" ];
@@ -12,9 +14,6 @@
     warn-dirty = false;
   };
 
-  # `nixpkgs#foo` used by the mutable user profile follows the stable branch
-  # instead of drifting to an unrelated registry target. It is still an
-  # unlocked branch, so `nix profile upgrade --all` can advance normally.
   nix.registry.nixpkgs.to = {
     type = "github";
     owner = "NixOS";
@@ -22,20 +21,16 @@
     ref = "nixos-26.05";
   };
 
-  # Garbage collection is deliberately manual in the prototype. Automatic GC
-  # can also prune profile generations, which would make GUI rollback retention
-  # surprising. krisNCC will eventually own an explicit retention policy.
-  nix.gc.automatic = false;
+  # Explicit/manual until krisNCC owns a visible retention policy.
+  nix.gc.automatic = lib.mkDefault false;
 
   boot.loader.systemd-boot.enable = lib.mkDefault true;
   boot.loader.systemd-boot.configurationLimit = lib.mkDefault config.krisos.bootEntryLimit;
   boot.loader.efi.canTouchEfiVariables = lib.mkDefault true;
 
-  zramSwap = {
-    enable = true;
-    algorithm = "zstd";
-    memoryPercent = 25;
-  };
+  zramSwap.enable = lib.mkDefault true;
+  zramSwap.algorithm = lib.mkDefault "zstd";
+  zramSwap.memoryPercent = lib.mkDefault 25;
 
   services.fstrim.enable = true;
 
@@ -49,5 +44,4 @@
 
   # Deliberately no SSH server in the personal desktop base.
   services.openssh.enable = false;
-
 }

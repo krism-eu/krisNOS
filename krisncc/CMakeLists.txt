@@ -23,7 +23,6 @@ set(KRISNCC_QML_FILES
     qml/modules/DashboardModule.qml
     qml/modules/SystemModule.qml
     qml/modules/SoftwareModule.qml
-    qml/modules/DistroboxModule.qml
     qml/modules/ConfigurationModule.qml
     qml/modules/RecoveryModule.qml
     qml/modules/ToolsModule.qml
