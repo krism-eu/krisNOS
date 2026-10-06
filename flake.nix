@@ -10,7 +10,11 @@
   };
 
   outputs =
-    { self, nixpkgs, icicle }:
+    {
+      self,
+      nixpkgs,
+      icicle,
+    }:
     let
       system = "x86_64-linux";
       lib = nixpkgs.lib;
