@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
-  <rect width="960" height="540" rx="36" fill="#20242b"/>
-  <circle cx="480" cy="220" r="92" fill="#7ebae4"/>
-  <path d="M438 220h84M480 178v84" stroke="#20242b" stroke-width="18" stroke-linecap="round"/>
-  <text x="480" y="370" text-anchor="middle" font-family="sans-serif" font-size="64" font-weight="700" fill="#f4f4f5">krisNOS</text>
-  <text x="480" y="420" text-anchor="middle" font-family="sans-serif" font-size="24" fill="#c8cdd4">NixOS · Plasma 6 · Icicle</text>
-</svg>

@@ -35,7 +35,7 @@ jobs:
         shell: bash
         run: |
           mapfile -t nix_files < <(
-            git ls-files '*.nix' ':!:installer/icicle/krisnos/hosts/HOSTNAME/configuration.nix'
+            git ls-files '*.nix'
           )
           test "${#nix_files[@]}" -gt 0
           nix fmt --no-update-lock-file -- --check "${nix_files[@]}"

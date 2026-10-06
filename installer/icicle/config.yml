@@ -1,9 +1,0 @@
----
-distribution_name: krisNOS
-branding: krisnos
-internet_check_url: http://nmcheck.gnome.org/check_network_status.txt
-default_hostname: krisnos
-choices:
-- !configuration
-  file: krisnos.yml
-- live
