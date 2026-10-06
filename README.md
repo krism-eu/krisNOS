@@ -59,7 +59,7 @@ La branch `iso` importa una revisione esatta di `main`, fissata nel proprio `fla
 
 Icicle prepara e monta le partizioni scelte, esegue `nixos-generate-config` sul sistema di destinazione e installa tramite `nixos-install --flake`. La configurazione generata usa i moduli del framework e nixpkgs tramite input locali `path:` corrispondenti alle sorgenti incorporate nella ISO.
 
-Il finalizzatore colloca la configurazione in `~/krisNOS-config`, collega `/etc/nixos` a quella directory e inizializza una storia Git locale senza remoto. Il repository locale non è un clone del repository GitHub: il collegamento successivo richiede una migrazione esplicita che preservi hardware e scelte dell'installazione.
+Al termine dell'installazione la configurazione generata resta in `/etc/nixos`, compreso il vero `hardware-configuration.nix` prodotto sulla macchina reale. L'installer non crea né inizializza `~/krisNOS-config` e non crea una storia Git parallela. Dopo il primo avvio si clona il repository personale canonico in `~/krisNOS-config`, si copia e si controlla il file hardware generato in `hosts/krisnos/hardware-configuration.nix`, quindi si valida, costruisce e applica la configurazione tramite krisNCC/`kris-configctl`.
 
 Per i comandi di build e la verifica di installazione e primo avvio, vedere il [README della branch ISO](https://github.com/krism-eu/krisNOS/blob/iso/README.md).
 
