@@ -54,21 +54,19 @@
         krisNCC = krisNCCPackage;
         icicle-patched = iciclePackage;
 
-        # Heavy outputs are explicit packages, not flake checks.
+        # Heavy outputs are explicit packages, not normal flake checks.
         iso = liveSystem.config.system.build.images.iso-installer;
         vm = liveSystem.config.system.build.vm;
       };
 
-      # Keep the normal flake gate useful without pulling ISO/VM builds into it.
-      # Build every krisNOS-owned helper plus krisNCC and the Icicle patch so
-      # syntax/build regressions are caught before changes reach main.
+      # Fast normal gate: build only krisNOS-owned components used by the system.
+      # Icicle is checked separately only when installer/Icicle inputs change.
       checks.${system} = {
         kris-app-build = krisAppPackage;
         kris-runtimectl-build = krisRuntimectlPackage;
         kris-system-activate-build = krisSystemActivatePackage;
         kris-configctl-build = krisConfigctlPackage;
         krisncc-build = krisNCCPackage;
-        icicle-patch = iciclePackage;
       };
 
       formatter.${system} = pkgs.nixfmt;
