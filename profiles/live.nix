@@ -35,11 +35,24 @@
         count = 65536;
       }
     ];
-    initialPassword = "live";
   };
 
   security.sudo.wheelNeedsPassword = false;
   users.mutableUsers = true;
+
+  # La live non deve chiedere credenziali per avviare/gestire Icicle.
+  # La regola è volutamente limitata alla sola action Polkit dell'installer e
+  # vive esclusivamente nel profilo ISO, quindi non viene installata nel sistema finale.
+  security.polkit.extraConfig = ''
+    polkit.addRule(function(action, subject) {
+      if (action.id == "org.snowflakeos.Icicle" &&
+          subject.local &&
+          subject.active &&
+          subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+      }
+    });
+  '';
 
   # La ISO krisNOS non porta il manuale NixOS locale nel menu.
   documentation.nixos.enable = lib.mkForce false;
