@@ -1,0 +1,42 @@
+name: Nix check
+
+on:
+  push:
+    branches:
+      - main
+      - work/krisncc-useful-features
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nix-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/determinate-nix-action@v3
+
+      - name: Flake metadata
+        run: nix flake metadata --no-update-lock-file
+
+      - name: Format
+        run: nix fmt --no-update-lock-file -- --check .
+
+      - name: Check
+        run: nix flake check --no-update-lock-file --show-trace
+
+      - name: Evaluate ISO
+        run: nix eval --no-update-lock-file --raw .#packages.x86_64-linux.iso.drvPath
