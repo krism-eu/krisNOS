@@ -2,9 +2,6 @@ name: Nix check
 
 on:
   push:
-    branches:
-      - main
-      - work/krisncc-useful-features
   pull_request:
     branches:
       - main
@@ -31,6 +28,15 @@ jobs:
 
       - name: Flake metadata
         run: nix flake metadata --no-update-lock-file
+
+      - name: Format
+        shell: bash
+        run: |
+          mapfile -t nix_files < <(
+            git ls-files '*.nix' ':!:installer/icicle/krisnos/configuration.nix'
+          )
+          test "${#nix_files[@]}" -gt 0
+          nix fmt --no-update-lock-file -- --check "${nix_files[@]}"
 
       - name: Check
         run: nix flake check --no-update-lock-file --show-trace
