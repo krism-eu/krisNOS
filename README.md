@@ -49,33 +49,19 @@ La dipendenza è unidirezionale:
           v
        krisNOS
 
-## ISO e installazione con Icicle
+## Branch e installazione con Icicle
 
-La ISO live usa l'immagine installer di NixOS e aggiunge **Icicle** come installer grafico.
+- `main` contiene il framework, i moduli NixOS, gli helper e krisNCC.
+- [`iso`](https://github.com/krism-eu/krisNOS/tree/iso) contiene Icicle, i template di installazione, i profili live e gli script ISO/VM.
+- [`krisNOS-config`](https://github.com/krism-eu/krisNOS-config) contiene la configurazione personale.
 
-Icicle viene avviato dalla sessione live e gestisce direttamente le scelte d'installazione:
+La branch `iso` importa una revisione esatta di `main`, fissata nel proprio `flake.lock`. Un aggiornamento di `main` non aggiorna automaticamente le ISO: l'adozione del nuovo framework richiede un aggiornamento esplicito del lock nella branch `iso`.
 
-- lingua
-- tastiera
-- fuso orario
-- nome utente e password
-- eventuale password root
-- hostname
-- disco intero oppure partizionamento manuale con GParted
-- riepilogo prima dell'installazione
+Icicle prepara e monta le partizioni scelte, esegue `nixos-generate-config` sul sistema di destinazione e installa tramite `nixos-install --flake`. La configurazione generata usa i moduli del framework e nixpkgs tramite input locali `path:` corrispondenti alle sorgenti incorporate nella ISO.
 
-Non esiste un partizionatore o uno script d'installazione krisNOS parallelo.
+Il finalizzatore colloca la configurazione in `~/krisNOS-config`, collega `/etc/nixos` a quella directory e inizializza una storia Git locale senza remoto. Il repository locale non è un clone del repository GitHub: il collegamento successivo richiede una migrazione esplicita che preservi hardware e scelte dell'installazione.
 
-Durante l'installazione Icicle:
-
-1. prepara e monta le partizioni scelte;
-2. esegue `nixos-generate-config` sul computer reale;
-3. genera la configurazione finale dai template in `installer/icicle/`;
-4. installa tramite `nixos-install --flake`.
-
-Il sistema installato importa `krisNOS.nixosModules.krisos`; `hardware-configuration.nix` resta quello generato sul computer reale.
-
-L'integrazione usa una revisione Icicle bloccata in `flake.lock`. I comandi di controllo e build usano `--no-update-lock-file`: un lock mancante o incoerente deve quindi fallire, non essere modificato silenziosamente durante una build.
+Per i comandi di build e la verifica di installazione e primo avvio, vedere il [README della branch ISO](https://github.com/krism-eu/krisNOS/blob/iso/README.md).
 
 ## Stato mutabile quotidiano
 
@@ -96,49 +82,27 @@ Non esiste alcun overlay scrivibile generico sopra `/etc` o `/nix/store`.
 
 `/var/lib/krisos/runtime.conf` esiste soltanto per la piccola policy persistente relativa allo stato generale del firewall.
 
-## Struttura del repository
+## Struttura della branch main
 
-- `flake.nix`
-- `flake.lock`
+- `flake.nix` e `flake.lock`
 - `modules/`
 - `packages/`
-- `profiles/`
-- `installer/icicle/`
 - `krisncc/`
 - `docs/`
-- `scripts/`
+- `.github/workflows/nix.yml`
 
-Il framework non contiene più una copia duplicata della configurazione personale della macchina.
-
-## Output principali
-
-- `nix build .#krisNCC`
-- `nix build .#iso`
-- `nix build .#vm`
-
-ISO e VM sono output pesanti espliciti e non fanno parte dei normali controlli del flake.
-
-## Gate prima di considerare finale la ISO Icicle
-
-Eseguire:
+## Output e controlli del framework
 
 ```bash
-./scripts/check.sh
-./scripts/build-iso.sh
+nix build --no-update-lock-file .#krisNCC
+nix build --no-update-lock-file --no-link .#checks.x86_64-linux.krisos-system
 ```
 
-Poi verificare almeno:
+Sono disponibili anche i pacchetti `kris-app`, `kris-configctl`, `kris-runtimectl` e `kris-system-activate`.
 
-- boot reale della ISO;
-- avvio automatico di Icicle nella sessione live;
-- percorso disco intero;
-- percorso di partizionamento manuale;
-- generazione di `hardware-configuration.nix`;
-- installazione e primo boot del sistema installato;
-- presenza di krisNCC nel sistema installato;
-- boot UEFI/systemd-boot e limite generazioni previsto.
+La CI di `main` verifica il formato e costruisce il sistema completo con un filesystem sintetico. Questa build non sostituisce il test dell'installer e del primo avvio sul computer reale.
 
-La precedente ISO senza Icicle non vale come verifica della nuova catena d'installazione.
+Gli output `iso`, `vm`, `icicle-patched` e `installer-config`, insieme agli script `scripts/check.sh`, `scripts/build-iso.sh` e `scripts/build-vm.sh`, appartengono esclusivamente alla branch `iso`.
 
 ## krisNCC
 
