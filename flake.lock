@@ -74,6 +74,27 @@
         "type": "github"
       }
     },
+    "krisNOS": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1791273118,
+        "narHash": "sha256-zNSkQW+kRDs5jR7WD3/j8X1BPQUGbaPiWjAH5d7Iix8=",
+        "owner": "krism-eu",
+        "repo": "krisNOS",
+        "rev": "5e9452c4f7c564098992336d09342f779e397465",
+        "type": "github"
+      },
+      "original": {
+        "owner": "krism-eu",
+        "ref": "main",
+        "repo": "krisNOS",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1791143449,
@@ -88,6 +109,13 @@
         "ref": "nixos-26.05",
         "repo": "nixpkgs",
         "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "icicle": "icicle",
+        "krisNOS": "krisNOS",
+        "nixpkgs": "nixpkgs"
       }
     },
     "snowfall-lib": {
@@ -126,12 +154,6 @@
         "owner": "nix-systems",
         "repo": "default",
         "type": "github"
-      }
-    },
-    "root": {
-      "inputs": {
-        "icicle": "icicle",
-        "nixpkgs": "nixpkgs"
       }
     }
   },
