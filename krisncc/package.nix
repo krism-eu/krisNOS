@@ -10,17 +10,22 @@
   nix,
   util-linux,
   bluez,
+  bash,
+  coreutils,
+  systemd,
+  power-profiles-daemon,
 }:
 
 let
   krisApp = callPackage ../packages/kris-app { };
   krisConfigctl = callPackage ../packages/kris-configctl { };
   krisRuntimectl = callPackage ../packages/kris-runtimectl { };
+  krisSystemActivate = callPackage ../packages/kris-system-activate { };
 in
 
 stdenv.mkDerivation {
   pname = "krisNCC";
-  version = "0.1.0";
+  version = "0.2.0";
   src = ./.;
 
   nativeBuildInputs = [
@@ -43,9 +48,14 @@ stdenv.mkDerivation {
         nix
         util-linux
         bluez
+        bash
+        coreutils
+        systemd
+        power-profiles-daemon
         krisApp
         krisConfigctl
         krisRuntimectl
+        krisSystemActivate
       ]
     }"
   ];

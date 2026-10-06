@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(krisNCC VERSION 0.1.0 LANGUAGES CXX)
+project(krisNCC VERSION 0.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -13,6 +13,8 @@ qt_add_executable(krisNCC
     src/main.cpp
     src/KrisNccBackend.cpp
     src/KrisNccBackend.h
+    src/KrisDesktopBackend.cpp
+    src/KrisDesktopBackend.h
 )
 
 set_source_files_properties(qml/components/UiMetrics.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)

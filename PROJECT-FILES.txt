@@ -38,6 +38,8 @@
 ./krisncc/qml/modules/SoftwareModule.qml
 ./krisncc/qml/modules/SystemModule.qml
 ./krisncc/qml/modules/ToolsModule.qml
+./krisncc/src/KrisDesktopBackend.cpp
+./krisncc/src/KrisDesktopBackend.h
 ./krisncc/src/KrisNccBackend.cpp
 ./krisncc/src/KrisNccBackend.h
 ./krisncc/src/main.cpp

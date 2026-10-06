@@ -14,6 +14,9 @@ in
     krisRuntimectl
     krisNCC
 
+    # Backup personale: motore esterno dedicato, non duplicato in krisNCC.
+    backintime-qt
+
     # Amministrazione locale essenziale.
     git
     curl
