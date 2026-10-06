@@ -81,11 +81,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1791290210,
-        "narHash": "sha256-S88KqVEKt/0mO0R6PsM2g+iOGA93NAsqys6Gdgm7ek4=",
+        "lastModified": 1791309600,
+        "narHash": "sha256-Pc7Zz9iglFqcKEHbXUU8WtfKvUpgnCf3fs5pn/BfMos=",
         "owner": "krism-eu",
         "repo": "krisNOS",
-        "rev": "b974d0a7c1e50da48dadc832b576a6ec475e8c8f",
+        "rev": "584131649eb752f1fc39da972c2174e49b932330",
         "type": "github"
       },
       "original": {
