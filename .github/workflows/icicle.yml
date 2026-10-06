@@ -45,5 +45,8 @@ jobs:
       - name: Build patched Icicle
         run: nix build --no-update-lock-file --no-link .#icicle-patched
 
+      - name: Build pinned installer config
+        run: nix build --no-update-lock-file --no-link .#installer-config
+
       - name: Evaluate installer image
         run: nix eval --no-update-lock-file --raw .#packages.x86_64-linux.iso.drvPath

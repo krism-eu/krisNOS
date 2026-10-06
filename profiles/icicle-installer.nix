@@ -1,5 +1,6 @@
 {
   iciclePackage,
+  installerConfig,
   pkgs,
   ...
 }:
@@ -11,13 +12,14 @@ let
   };
 in
 {
-  # Icicle exists only in the live ISO. The installed system is generated from
-  # the templates under installer/icicle and imports the krisNOS framework.
+  # Icicle exists only in the live ISO. The generated installerConfig contains
+  # the exact krisNOS and nixpkgs source store paths used to build this ISO, so
+  # the installation itself does not need GitHub or another network source.
   environment.systemPackages = [
     iciclePackage
     icicleAutostart
     pkgs.gparted
   ];
 
-  environment.etc."icicle".source = ../installer/icicle;
+  environment.etc."icicle".source = installerConfig;
 }

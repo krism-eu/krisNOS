@@ -30,6 +30,31 @@
         upstreamIcicle = icicle.packages.${system}.default;
       };
 
+      # Build the installer templates once per ISO and bake in the exact source
+      # store paths used for this build. Both become explicit local path inputs
+      # in the installed flake, so pure evaluation accepts them without network
+      # resolution. The framework input is flake=false to avoid pulling the
+      # installer-only Icicle dependency graph into the installed system.
+      installerConfig =
+        pkgs.runCommand "krisnos-icicle-config"
+          {
+            nativeBuildInputs = [ pkgs.gnused ];
+          }
+          ''
+            mkdir -p "$out"
+            cp -R ${./installer/icicle}/. "$out/"
+            chmod -R u+w "$out"
+
+            substituteInPlace "$out/krisnos/flake.nix" \
+              --replace-fail '@FRAMEWORK_SOURCE@' '${self.outPath}' \
+              --replace-fail '@NIXPKGS_SOURCE@' '${nixpkgs.outPath}'
+
+            if grep -R -n -E '@(FRAMEWORK_SOURCE|NIXPKGS_SOURCE)@' "$out/krisnos"; then
+              echo "installer source placeholder left unresolved" >&2
+              exit 1
+            fi
+          '';
+
       # Generic installed-system CI target. It uses the full reusable krisNOS
       # module and a harmless synthetic root filesystem, but no live ISO or
       # installer layer. Building its toplevel validates the complete base OS.
@@ -49,11 +74,12 @@
       };
 
       # Generic live configuration. Icicle is included only in the live image;
-      # the installed system is generated from installer/icicle templates and
-      # imports the reusable krisNOS module.
+      # the installed system is generated from the installer templates.
       liveSystem = lib.nixosSystem {
         inherit system;
-        specialArgs = { inherit iciclePackage; };
+        specialArgs = {
+          inherit iciclePackage installerConfig;
+        };
         modules = [
           krisosModule
           ./profiles/live.nix
@@ -71,6 +97,7 @@
         kris-configctl = krisConfigctlPackage;
         krisNCC = krisNCCPackage;
         icicle-patched = iciclePackage;
+        installer-config = installerConfig;
 
         # Heavy outputs are explicit packages, not normal flake checks.
         iso = liveSystem.config.system.build.images.iso-installer;

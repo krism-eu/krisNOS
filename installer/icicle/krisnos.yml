@@ -13,3 +13,5 @@ steps:
   hostname: true
 - partitioning
 - summary
+commands:
+- /etc/nixos/finalize-install.sh

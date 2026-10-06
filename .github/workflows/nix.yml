@@ -33,10 +33,88 @@ jobs:
         shell: bash
         run: |
           mapfile -t nix_files < <(
-            git ls-files '*.nix' ':!:installer/icicle/krisnos/configuration.nix'
+            git ls-files '*.nix' ':!:installer/icicle/krisnos/hosts/HOSTNAME/configuration.nix'
           )
           test "${#nix_files[@]}" -gt 0
           nix fmt --no-update-lock-file -- --check "${nix_files[@]}"
+
+      - name: Validate generated installer config offline
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          installer_config="$(
+            nix build --no-update-lock-file --no-link --print-out-paths .#installer-config
+          )"
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+
+          cp -R "$installer_config/krisnos/." "$tmp/"
+          chmod -R u+w "$tmp"
+          mv "$tmp/hosts/HOSTNAME" "$tmp/hosts/krisnos"
+
+          python3 - "$tmp/flake.nix" "$tmp/hosts/krisnos/configuration.nix" <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          replacements = {
+              "@HOSTNAME@": "krisnos",
+              "@USERNAME@": "kris",
+              "@FULLNAME@": "Kris Test",
+              "@TIMEZONE@": '  time.timeZone = "Europe/Rome";',
+              "@LOCALE@": '  i18n.defaultLocale = "it_IT.UTF-8";',
+              "@KEYBOARD@": (
+                  '  services.xserver.xkb.layout = "it";\n'
+                  '  console.useXkbConfig = true;'
+              ),
+              "@AUTOLOGIN@": '  krisos.autoLogin = true;',
+              "@BOOTLOADER@": "",
+              "@STATEVERSION@": '  system.stateVersion = "26.05";',
+          }
+
+          for filename in sys.argv[1:]:
+              path = Path(filename)
+              text = path.read_text()
+              for source, replacement in replacements.items():
+                  text = text.replace(source, replacement)
+              leftovers = sorted(set(re.findall(r"@[A-Z][A-Z0-9_]*@", text)))
+              if leftovers:
+                  raise SystemExit(f"unresolved installer placeholders in {path}: {leftovers}")
+              path.write_text(text)
+          PY
+
+          cat > "$tmp/hardware-configuration.nix" <<'EOF'
+          { ... }:
+          {
+            fileSystems."/" = {
+              device = "/dev/disk/by-label/krisNOS-ci";
+              fsType = "btrfs";
+            };
+          }
+          EOF
+
+          bash -n "$tmp/finalize-install.sh"
+
+          if grep -R -n 'github:' "$tmp"; then
+            echo 'generated installer configuration still contains a GitHub input' >&2
+            exit 1
+          fi
+
+          (
+            cd "$tmp"
+            nix flake lock --offline
+            jq -e '
+              [ .nodes[] | .locked.type? // empty ]
+              | all(. == "path")
+            ' flake.lock >/dev/null
+            nix eval \
+              --offline \
+              --no-update-lock-file \
+              --raw \
+              .#nixosConfigurations.krisnos.config.system.build.toplevel.drvPath \
+              >/dev/null
+          )
 
       - name: Build complete krisNOS system
         run: nix build --no-update-lock-file --no-link --print-build-logs .#checks.x86_64-linux.krisos-system
