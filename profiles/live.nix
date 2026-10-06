@@ -40,15 +40,14 @@
   security.sudo.wheelNeedsPassword = false;
   users.mutableUsers = true;
 
-  # La live non deve chiedere credenziali per avviare/gestire Icicle.
-  # La regola è volutamente limitata alla sola action Polkit dell'installer e
-  # vive esclusivamente nel profilo ISO, quindi non viene installata nel sistema finale.
+  # Solo nella ISO live: l'utente kris è già deliberatamente wheel con sudo
+  # passwordless e Icicle usa più chiamate pkexec durante installazione e
+  # partizionamento. Autorizza quindi tutte le action Polkit per questo solo
+  # utente live, evitando prompt o action-id specifici. Questa regola non viene
+  # installata nel sistema finale.
   security.polkit.extraConfig = ''
     polkit.addRule(function(action, subject) {
-      if (action.id == "org.snowflakeos.Icicle" &&
-          subject.local &&
-          subject.active &&
-          subject.isInGroup("wheel")) {
+      if (subject.user == "kris") {
         return polkit.Result.YES;
       }
     });
