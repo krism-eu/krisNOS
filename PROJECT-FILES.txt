@@ -1,3 +1,4 @@
+./.github/workflows/nix.yml
 ./.gitignore
 ./PROJECT-FILES.txt
 ./README.md
@@ -9,6 +10,7 @@
 ./docs/CHANGES-v0_6.md
 ./docs/DECISIONS.md
 ./docs/GITHUB-SYNC.md
+./docs/KERNEL-HARDENING-PLAN.md
 ./docs/KRISNCC-BACKEND.md
 ./docs/KRISNCC-DESIGN.md
 ./docs/KRISNCC-FUNCTIONS.md
@@ -20,18 +22,13 @@
 ./docs/REPOSITORY-MODEL.md
 ./flake.lock
 ./flake.nix
-./installer/icicle/branding/krisnos/krisnos.svg
-./installer/icicle/branding/krisnos/slides.yml
-./installer/icicle/config.yml
-./installer/icicle/krisnos/configuration.nix
-./installer/icicle/krisnos/flake.nix
-./installer/icicle/krisnos.yml
 ./krisncc/CMakeLists.txt
 ./krisncc/README.md
 ./krisncc/org.krisncc.desktop
 ./krisncc/package.nix
 ./krisncc/qml/Main.qml
 ./krisncc/qml/components/UiMetrics.qml
+./krisncc/qml/modules/CleanupModule.qml
 ./krisncc/qml/modules/ConfigurationModule.qml
 ./krisncc/qml/modules/DashboardModule.qml
 ./krisncc/qml/modules/RecoveryModule.qml
@@ -42,11 +39,14 @@
 ./krisncc/src/KrisDesktopBackend.h
 ./krisncc/src/KrisNccBackend.cpp
 ./krisncc/src/KrisNccBackend.h
+./krisncc/src/KrisPackageBackend.cpp
+./krisncc/src/KrisPackageBackend.h
 ./krisncc/src/main.cpp
 ./modules/base-packages.nix
 ./modules/core.nix
 ./modules/default.nix
 ./modules/desktop-plasma.nix
+./modules/hardening.nix
 ./modules/hardware-amd.nix
 ./modules/mutable-layer.nix
 ./modules/options.nix
@@ -59,8 +59,3 @@
 ./packages/kris-runtimectl/kris-runtimectl.sh
 ./packages/kris-system-activate/default.nix
 ./packages/kris-system-activate/kris-system-activate.sh
-./profiles/icicle-installer.nix
-./profiles/live.nix
-./scripts/build-iso.sh
-./scripts/build-vm.sh
-./scripts/check.sh

@@ -76,19 +76,23 @@ for link in /nix/var/nix/profiles/system-*-link; do
   fi
 done
 
-[ -n "$target_generation" ] || {
-  echo "kris-system-activate: il toplevel richiesto non appartiene a una generazione precedente" >&2
-  exit 2
-}
-
-# Il bootloader NixOS enumera le generazioni dal profilo system, quindi il
-# profilo deve puntare alla generazione di destinazione prima dello switch.
-# In caso di errore ripristiniamo sia il profilo sia, per quanto possibile,
-# lo stato runtime/bootloader della generazione da cui siamo partiti.
-nix-env --profile "$profile" --switch-generation "$target_generation"
+# Se il toplevel appartiene già a una generazione precedente, eseguiamo
+# il rollback. Altrimenti registriamo il nuovo toplevel nel profilo system,
+# come fa nixos-rebuild prima di switch-to-configuration.
+if [ -n "$target_generation" ]; then
+  nix-env --profile "$profile" --switch-generation "$target_generation"
+  activation_label="generazione $target_generation"
+else
+  [ -f "$canonical/nixos-version" ] || {
+    echo "kris-system-activate: nixos-version mancante nel nuovo toplevel" >&2
+    exit 2
+  }
+  nix-env --profile "$profile" --set "$canonical"
+  activation_label="nuovo toplevel"
+fi
 
 if "$canonical/bin/switch-to-configuration" switch; then
-  echo "kris-system-activate: rollback applicato alla generazione $target_generation"
+  echo "kris-system-activate: attivazione applicata: $activation_label"
   exit 0
 else
   activation_status=$?
