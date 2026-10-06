@@ -21,6 +21,10 @@
       pkgs = nixpkgs.legacyPackages.${system};
 
       krisosModule = import ./modules;
+      krisAppPackage = pkgs.callPackage ./packages/kris-app { };
+      krisRuntimectlPackage = pkgs.callPackage ./packages/kris-runtimectl { };
+      krisSystemActivatePackage = pkgs.callPackage ./packages/kris-system-activate { };
+      krisConfigctlPackage = pkgs.callPackage ./packages/kris-configctl { };
       krisNCCPackage = pkgs.callPackage ./krisncc/package.nix { };
       iciclePackage = pkgs.callPackage ./packages/icicle-patched {
         upstreamIcicle = icicle.packages.${system}.default;
@@ -43,10 +47,10 @@
       nixosModules.krisos = krisosModule;
 
       packages.${system} = {
-        kris-app = pkgs.callPackage ./packages/kris-app { };
-        kris-runtimectl = pkgs.callPackage ./packages/kris-runtimectl { };
-        kris-system-activate = pkgs.callPackage ./packages/kris-system-activate { };
-        kris-configctl = pkgs.callPackage ./packages/kris-configctl { };
+        kris-app = krisAppPackage;
+        kris-runtimectl = krisRuntimectlPackage;
+        kris-system-activate = krisSystemActivatePackage;
+        kris-configctl = krisConfigctlPackage;
         krisNCC = krisNCCPackage;
         icicle-patched = iciclePackage;
 
@@ -56,9 +60,13 @@
       };
 
       # Keep the normal flake gate useful without pulling ISO/VM builds into it.
-      # Building icicle-patch makes every --replace-fail assertion fail early
-      # if the pinned upstream source stops matching our compatibility patch.
+      # Build every krisNOS-owned helper plus krisNCC and the Icicle patch so
+      # syntax/build regressions are caught before changes reach main.
       checks.${system} = {
+        kris-app-build = krisAppPackage;
+        kris-runtimectl-build = krisRuntimectlPackage;
+        kris-system-activate-build = krisSystemActivatePackage;
+        kris-configctl-build = krisConfigctlPackage;
         krisncc-build = krisNCCPackage;
         icicle-patch = iciclePackage;
       };
