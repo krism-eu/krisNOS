@@ -5,6 +5,10 @@
   ...
 }:
 {
+  # krisNOS desktop policy: no Xorg/X11 session.
+  # XWayland remains available for legacy applications.
+  services.xserver.enable = false;
+
   services.displayManager.sddm = {
     enable = true;
     wayland.enable = true;

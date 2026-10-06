@@ -7,6 +7,24 @@
 {
   # Infrastructure lives in the base; day-to-day state is left mutable.
   networking.networkmanager.enable = true;
+  networking.enableIPv6 = false;
+
+  # First-boot policy: Wi-Fi starts disabled.
+  # Afterwards NetworkManager owns and preserves the user's radio state.
+  systemd.services.NetworkManager.preStart = lib.mkBefore ''
+    state=/var/lib/NetworkManager/NetworkManager.state
+    if [ ! -e "$state" ]; then
+      ${pkgs.coreutils}/bin/install -d -m 0700 /var/lib/NetworkManager
+      ${pkgs.coreutils}/bin/cat > "$state" <<'EOF'
+[main]
+NetworkingEnabled=true
+WirelessEnabled=false
+WWANEnabled=false
+EOF
+      ${pkgs.coreutils}/bin/chmod 0600 "$state"
+    fi
+  '';
+
 
   # No WWAN/cellular modem on the target desktop. Plasma may otherwise
   # pull ModemManager in as an optional integration.
