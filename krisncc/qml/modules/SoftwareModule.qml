@@ -11,10 +11,7 @@ Kirigami.ScrollablePage {
         return KrisBackend.busy || DesktopBackend.busy
     }
 
-    Component.onCompleted: {
-        KrisBackend.refreshSoftware()
-        KrisBackend.refreshDistroboxes()
-    }
+    Component.onCompleted: KrisBackend.refreshSoftware()
 
     ColumnLayout {
         width: parent.width
@@ -35,6 +32,10 @@ Kirigami.ScrollablePage {
         Controls.TabBar {
             id: tabs
             Layout.fillWidth: true
+            onCurrentIndexChanged: {
+                if (currentIndex === 1)
+                    KrisBackend.refreshDistroboxes()
+            }
             Controls.TabButton { text: qsTr("Nix") }
             Controls.TabButton { text: qsTr("Distrobox") }
         }
@@ -151,7 +152,7 @@ Kirigami.ScrollablePage {
                     Layout.fillWidth: true
                     Controls.Label {
                         Layout.fillWidth: true
-                        text: qsTr("Ambienti Distrobox")
+                        text: qsTr("Container Distrobox presenti (%1)").arg(KrisBackend.distroboxes.length)
                         font.bold: true
                     }
                     Controls.Button {
@@ -161,19 +162,32 @@ Kirigami.ScrollablePage {
                     }
                 }
 
+                Controls.Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: qsTr("Qui krisNCC mostra solo l'inventario. Creazione, accesso e rimozione restano a un gestore esterno dedicato.")
+                    opacity: 0.72
+                }
+
                 Repeater {
                     model: KrisBackend.distroboxes
                     delegate: Kirigami.AbstractCard {
                         required property string modelData
                         Layout.fillWidth: true
-                        contentItem: Controls.Label { text: modelData }
+                        contentItem: Controls.Label {
+                            text: {
+                                const parts = modelData.split("|")
+                                return parts.length > 1 ? parts[1].trim() : modelData.trim()
+                            }
+                            font.bold: true
+                        }
                     }
                 }
 
                 Kirigami.InlineMessage {
                     Layout.fillWidth: true
                     visible: KrisBackend.distroboxes.length === 0
-                    text: qsTr("Nessun ambiente Distrobox rilevato.")
+                    text: qsTr("Nessun container Distrobox rilevato.")
                 }
             }
         }

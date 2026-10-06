@@ -52,6 +52,7 @@ stdenv.mkDerivation {
         coreutils
         systemd
         power-profiles-daemon
+        kdePackages.kdialog
         krisApp
         krisConfigctl
         krisRuntimectl

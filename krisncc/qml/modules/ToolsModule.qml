@@ -11,6 +11,67 @@ Kirigami.ScrollablePage {
         return KrisBackend.busy || DesktopBackend.busy
     }
 
+    readonly property string txtMergePresetName: qsTr("Unisci TXT di una cartella")
+    readonly property string promptPresetName: qsTr("Prompt Bash colorato")
+
+    readonly property string txtMergePresetScript: [
+        "folder=\"$(kdialog --getexistingdirectory \"$HOME\" --title \"Seleziona cartella con file TXT\")\" || exit 0",
+        "[ -n \"$folder\" ] || exit 0",
+        "parent=\"$(dirname \"$folder\")\"",
+        "name=\"$(basename \"$folder\")\"",
+        "output=\"$parent/${name}-uniti.txt\"",
+        "shopt -s nullglob nocaseglob",
+        "files=(\"$folder\"/*.txt)",
+        "if [ \"${#files[@]}\" -eq 0 ]; then",
+        "  kdialog --sorry \"Nessun file TXT trovato nella cartella selezionata.\"",
+        "  exit 1",
+        "fi",
+        ": > \"$output\"",
+        "for file in \"${files[@]}\"; do",
+        "  printf '===== %s =====\\n\\n' \"$(basename \"$file\")\" >> \"$output\"",
+        "  cat -- \"$file\" >> \"$output\"",
+        "  printf '\\n\\n' >> \"$output\"",
+        "done",
+        "kdialog --msgbox \"Creato: $output\""
+    ].join("\n")
+
+    readonly property string promptPresetScript: [
+        "rc=\"$HOME/.bashrc\"",
+        "begin='# >>> krisNCC prompt >>>'",
+        "end='# <<< krisNCC prompt <<<'",
+        "tmp=\"$(mktemp)\"",
+        "skip=0",
+        "if [ -f \"$rc\" ]; then",
+        "  while IFS= read -r line || [ -n \"$line\" ]; do",
+        "    if [ \"$line\" = \"$begin\" ]; then skip=1; continue; fi",
+        "    if [ \"$line\" = \"$end\" ]; then skip=0; continue; fi",
+        "    [ \"$skip\" -eq 1 ] || printf '%s\\n' \"$line\" >> \"$tmp\"",
+        "  done < \"$rc\"",
+        "  chmod --reference=\"$rc\" \"$tmp\"",
+        "else",
+        "  chmod 600 \"$tmp\"",
+        "fi",
+        "printf '%s\\n' \"$begin\" >> \"$tmp\"",
+        "printf '%s\\n' \"PS1='\\n\\[\\e[1;36m\\]\\u\\[\\e[0m\\]@\\[\\e[1;35m\\]\\h\\[\\e[0m\\] \\[\\e[1;33m\\]\\w\\[\\e[0m\\]\\n\\[\\e[1;32m\\]\\$\\[\\e[0m\\] '\" >> \"$tmp\"",
+        "printf '%s\\n' \"$end\" >> \"$tmp\"",
+        "mv -- \"$tmp\" \"$rc\"",
+        "kdialog --msgbox \"Prompt salvato in ~/.bashrc. Apri un nuovo terminale.\""
+    ].join("\n")
+
+    function hasCustomAction(name) {
+        for (let i = 0; i < DesktopBackend.customActions.length; ++i) {
+            if (DesktopBackend.customActions[i].name === name)
+                return true
+        }
+        return false
+    }
+
+    function addPreset(name, script, confirm) {
+        if (!hasCustomAction(name)
+                && DesktopBackend.customActions.length < DesktopBackend.customActionLimit)
+            DesktopBackend.saveCustomAction("", name, script, confirm)
+    }
+
     Component.onCompleted: DesktopBackend.reloadCustomActions()
 
     ColumnLayout {
@@ -145,11 +206,67 @@ Kirigami.ScrollablePage {
                     text: DesktopBackend.actionError
                 }
 
+                Controls.Label {
+                    text: qsTr("Preset pronti")
+                    font.bold: true
+                }
+
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: width > 760 ? 2 : 1
+                    uniformCellWidths: true
+                    columnSpacing: 8
+                    rowSpacing: 8
+
+                    Repeater {
+                        model: [
+                            {
+                                name: root.txtMergePresetName,
+                                description: qsTr("Sceglie graficamente una cartella, unisce i file TXT e salva il risultato nella cartella madre."),
+                                script: root.txtMergePresetScript,
+                                confirm: false
+                            },
+                            {
+                                name: root.promptPresetName,
+                                description: qsTr("Imposta in ~/.bashrc il prompt colorato utente/host/percorso con separazione visiva tra i comandi."),
+                                script: root.promptPresetScript,
+                                confirm: true
+                            }
+                        ]
+                        delegate: Kirigami.AbstractCard {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            contentItem: ColumnLayout {
+                                Controls.Label {
+                                    Layout.fillWidth: true
+                                    text: modelData.name
+                                    font.bold: true
+                                }
+                                Controls.Label {
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    text: modelData.description
+                                    opacity: 0.72
+                                }
+                                Controls.Button {
+                                    text: root.hasCustomAction(modelData.name)
+                                        ? qsTr("Presente") : qsTr("Aggiungi")
+                                    enabled: !root.globalBusy()
+                                          && !root.hasCustomAction(modelData.name)
+                                          && DesktopBackend.customActions.length < DesktopBackend.customActionLimit
+                                    onClicked: root.addPreset(
+                                        modelData.name, modelData.script, modelData.confirm)
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Kirigami.InlineMessage {
                     Layout.fillWidth: true
                     visible: DesktopBackend.customActions.length === 0
                     type: Kirigami.MessageType.Information
-                    text: qsTr("Nessun comando personale salvato.")
+                    text: qsTr("Nessun comando personale salvato. Puoi aggiungere uno dei preset qui sopra o crearne uno nuovo.")
                 }
 
                 Repeater {
