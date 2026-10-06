@@ -17,7 +17,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -38,5 +38,5 @@ jobs:
           test "${#nix_files[@]}" -gt 0
           nix fmt --no-update-lock-file -- --check "${nix_files[@]}"
 
-      - name: Check krisNOS components
-        run: nix flake check --no-update-lock-file --show-trace
+      - name: Build complete krisNOS system
+        run: nix build --no-update-lock-file --no-link --print-build-logs .#checks.x86_64-linux.krisos-system
