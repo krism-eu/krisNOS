@@ -31,10 +31,6 @@
       # Framework/runtime preso dalla revisione di main fissata nel lock.
       krisosModule = krisNOS.nixosModules.krisos;
 
-      iciclePackage = pkgs.callPackage ./packages/icicle-patched {
-        upstreamIcicle = icicle.packages.${system}.default;
-      };
-
       # La configurazione generata dall'installer contiene esattamente le
       # sorgenti krisNOS/main e nixpkgs usate per costruire questa ISO.
       installerConfig =
@@ -55,6 +51,14 @@
               exit 1
             fi
           '';
+
+      # Icicle legge la configurazione dalla propria directory nel Nix store.
+      # Perciò il pacchetto deve incorporare installerConfig: /etc/icicle resta
+      # disponibile per ispezione nella live, ma non è la sorgente usata dal binario.
+      iciclePackage = pkgs.callPackage ./packages/icicle-patched {
+        upstreamIcicle = icicle.packages.${system}.default;
+        inherit installerConfig;
+      };
 
       liveSystem = nixpkgs.lib.nixosSystem {
         inherit system;
