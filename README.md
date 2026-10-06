@@ -73,7 +73,7 @@ Durante l'installazione Icicle:
 3. genera la configurazione finale dai template in `installer/icicle/`;
 4. installa tramite `nixos-install --flake`.
 
-Il sistema installato importa `krisNOS.nixosModules.krisos`; `hardware-configuration.nix` resta quello generato sul computer reale.
+Il sistema installato usa direttamente i moduli della revisione esatta di `krisNOS/main` fissata dalla ISO. La sorgente del framework e quella di nixpkgs vengono incorporate come input `path:` già presenti nello store dell'installer; `hardware-configuration.nix` resta quello generato sul computer reale.
 
 L'integrazione usa una revisione Icicle bloccata in `flake.lock`. I comandi di controllo e build usano `--no-update-lock-file`: un lock mancante o incoerente deve quindi fallire, non essere modificato silenziosamente durante una build.
 
@@ -96,23 +96,24 @@ Non esiste alcun overlay scrivibile generico sopra `/etc` o `/nix/store`.
 
 `/var/lib/krisos/runtime.conf` esiste soltanto per la piccola policy persistente relativa allo stato generale del firewall.
 
-## Struttura del repository
+## Struttura della branch ISO
+
+Questa branch contiene soltanto ciò che serve per costruire e verificare installer, live ISO e VM:
 
 - `flake.nix`
 - `flake.lock`
-- `modules/`
-- `packages/`
-- `profiles/`
 - `installer/icicle/`
-- `krisncc/`
-- `docs/`
+- `packages/icicle-patched/`
+- `profiles/`
 - `scripts/`
+- `docs/`
 
-Il framework non contiene più una copia duplicata della configurazione personale della macchina.
+Il framework di sistema e krisNCC non sono duplicati qui: vengono presi dalla revisione di `main` fissata in `flake.lock`.
 
 ## Output principali
 
-- `nix build .#krisNCC`
+- `nix build .#icicle-patched`
+- `nix build .#installer-config`
 - `nix build .#iso`
 - `nix build .#vm`
 

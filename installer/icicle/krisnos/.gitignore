@@ -1,0 +1,23 @@
+# Never version secrets or local credentials
+/secrets/
+*.key
+*.pem
+*.p12
+*.pfx
+*.age
+.env
+.env.*
+
+# Local/editor state
+.direnv/
+.result
+result
+result-*
+*.swp
+*~
+
+# Runtime state belongs to the machine, not Git
+runtime/
+state/
+
+.directory
