@@ -27,7 +27,6 @@
 ./installer/icicle/config.yml
 ./installer/icicle/krisnos.yml
 ./installer/icicle/krisnos/.gitignore
-./installer/icicle/krisnos/finalize-install.sh
 ./installer/icicle/krisnos/flake.nix
 ./installer/icicle/krisnos/hosts/HOSTNAME/configuration.nix
 ./installer/icicle/krisnos/modules/free.nix

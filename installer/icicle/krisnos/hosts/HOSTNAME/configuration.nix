@@ -6,9 +6,9 @@
   ...
 }:
 {
-  # nixos-generate-config writes this file at the root of the temporary
-  # installer configuration. finalize-install.sh also creates the host-local
-  # compatibility symlink expected by kris-configctl after installation.
+  # nixos-generate-config writes the hardware configuration at the root of
+  # the temporary installer configuration. The canonical personal repository
+  # receives the reviewed hardware-configuration.nix separately after install.
   imports = [
     ../../hardware-configuration.nix
     ../../modules/local-system.nix

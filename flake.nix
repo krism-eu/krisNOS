@@ -46,13 +46,6 @@
             mkdir -p "$out"
             cp -R ${./installer/icicle}/. "$out/"
             chmod -R u+w "$out"
-            chmod 0755 "$out/krisnos/finalize-install.sh"
-
-            test -x "$out/krisnos/finalize-install.sh" || {
-              echo "installer finalizer is not executable" >&2
-              exit 1
-            }
-
             substituteInPlace "$out/krisnos/flake.nix" \
               --replace-fail '@FRAMEWORK_SOURCE@' '${krisNOS.outPath}' \
               --replace-fail '@NIXPKGS_SOURCE@' '${nixpkgs.outPath}'
