@@ -42,7 +42,7 @@ writeShellApplication {
         fi
         exec 9>"$lock_file"
         if ! flock -n 9; then
-          printf '%s\n' 'kris-configctl: un’altra operazione di modifica è già in corso.' >&2
+          printf '%s\n' "kris-configctl: un'altra operazione di modifica è già in corso." >&2
           exit 75
         fi
         ;;
