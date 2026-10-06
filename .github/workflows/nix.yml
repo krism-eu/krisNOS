@@ -17,7 +17,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -25,13 +25,6 @@ jobs:
 
       - name: Install Nix
         uses: DeterminateSystems/determinate-nix-action@v3
-
-      - name: Cache Nix
-        uses: nix-community/cache-nix-action@v7
-        with:
-          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}
-          restore-prefixes-first-match: |
-            nix-${{ runner.os }}-
 
       - name: Flake metadata
         run: nix flake metadata --no-update-lock-file
@@ -45,5 +38,5 @@ jobs:
           test "${#nix_files[@]}" -gt 0
           nix fmt --no-update-lock-file -- --check "${nix_files[@]}"
 
-      - name: Check
+      - name: Check krisNOS components
         run: nix flake check --no-update-lock-file --show-trace
