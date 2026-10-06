@@ -17,7 +17,6 @@ if [ -z "$HOST" ]; then
     fi
   fi
 fi
-DEFAULT_REMOTE="${KRISOS_CONFIG_REMOTE:-https://github.com/krism-eu/krisNOS-config.git}"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/krisos"
 STATE_FILE="$STATE_DIR/config-sync.state"
 PENDING_LINK="$STATE_DIR/pending-system"
@@ -29,7 +28,7 @@ PACKAGES_END='# krisNCC system packages: end'
 usage() {
   cat <<'USAGE'
 Usage:
-  kris-configctl init [git-url]
+  kris-configctl init
   kris-configctl status [--json]
   kris-configctl fetch
   kris-configctl diff
@@ -53,7 +52,6 @@ Internal krisNCC commands:
 
 Environment:
   KRISOS_CONFIG_REPO     local working tree (default: ~/krisNOS-config)
-  KRISOS_CONFIG_REMOTE   clone URL used by init (default: krism-eu/krisNOS-config)
   KRISOS_HOST            NixOS flake host name (default: current hostname; if
                          it does not match and the repo has exactly one host,
                          that sole host is selected automatically)
@@ -575,14 +573,21 @@ cleanup_store() {
 cmd="${1:-}"
 case "$cmd" in
   init)
-    [ "$#" -le 2 ] || { usage >&2; exit 2; }
+    [ "$#" -eq 1 ] || { usage >&2; exit 2; }
     need git
-    [ ! -e "$REPO" ] || die "destinazione già esistente: $REPO"
-    if [ "${KRISOS_NONINTERACTIVE:-0}" = 1 ]; then
-      GIT_TERMINAL_PROMPT=0 timeout 45s git clone -- "${2:-$DEFAULT_REMOTE}" "$REPO"
-    else
-      git clone -- "${2:-$DEFAULT_REMOTE}" "$REPO"
+    [ -d "$REPO" ] || die "configurazione locale mancante: $REPO"
+    [ -f "$REPO/flake.nix" ] || die "flake.nix mancante nella configurazione locale"
+
+    if [ -d "$REPO/.git" ]; then
+      printf 'Repo locale già inizializzato: %s\n' "$REPO"
+      exit 0
     fi
+
+    git -C "$REPO" init -b main >/dev/null
+    git -C "$REPO" add --all
+    git -C "$REPO"       -c user.name='krisNOS local'       -c user.email='local@localhost'       commit -m 'Initial local krisNOS configuration' >/dev/null
+
+    printf 'Repo locale inizializzato: %s\n' "$REPO"
     ;;
   status)
     [ "$#" -le 2 ] || { usage >&2; exit 2; }

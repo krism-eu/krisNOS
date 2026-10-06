@@ -14,7 +14,7 @@ Kirigami.ScrollablePage {
         Controls.Label { text: qsTr("Config del sistema"); font.bold: true; font.pointSize: Kirigami.Theme.defaultFont.pointSize + 2 }
         Kirigami.InlineMessage {
             Layout.fillWidth: true
-            text: qsTr("GitHub è facoltativo. Controllo, sync, verifica, build e applicazione sono operazioni separate e sempre avviate da te.")
+            text: qsTr("La configurazione locale è la sorgente principale del sistema. GitHub è facoltativo e viene usato solo quando scegli esplicitamente di sincronizzare.")
             type: Kirigami.MessageType.Information
         }
 
@@ -27,8 +27,9 @@ Kirigami.ScrollablePage {
                 Controls.Label { text: qsTr("Repo locale"); font.bold: true } Controls.Label { text: KrisBackend.configStatus.repo || "~/krisNOS-config" }
                 Controls.Label { text: qsTr("Branch"); font.bold: true } Controls.Label { text: KrisBackend.configStatus.branch || "?" }
                 Controls.Label { text: qsTr("Commit"); font.bold: true } Controls.Label { text: KrisBackend.configStatus.head ? KrisBackend.configStatus.head.substring(0, 12) : "?" }
-                Controls.Label { text: qsTr("Locale avanti"); font.bold: true } Controls.Label { text: KrisBackend.configStatus.ahead !== undefined ? KrisBackend.configStatus.ahead : "?" }
-                Controls.Label { text: qsTr("GitHub avanti"); font.bold: true } Controls.Label { text: KrisBackend.configStatus.behind !== undefined ? KrisBackend.configStatus.behind : "?" }
+                Controls.Label { text: qsTr("GitHub"); font.bold: true } Controls.Label { text: KrisBackend.configStatus.upstream ? KrisBackend.configStatus.upstream : qsTr("Non collegato") }
+                Controls.Label { text: qsTr("Locale avanti"); font.bold: true } Controls.Label { text: KrisBackend.configStatus.upstream ? KrisBackend.configStatus.ahead : "—" }
+                Controls.Label { text: qsTr("GitHub avanti"); font.bold: true } Controls.Label { text: KrisBackend.configStatus.upstream ? KrisBackend.configStatus.behind : "—" }
                 Controls.Label { text: qsTr("Modifiche locali"); font.bold: true } Controls.Label { text: KrisBackend.configStatus.dirty ? qsTr("Sì") : qsTr("No") }
                 Controls.Label { text: qsTr("Ultima applicata"); font.bold: true } Controls.Label { text: KrisBackend.configStatus.appliedCommit ? KrisBackend.configStatus.appliedCommit.substring(0, 12) : qsTr("Non registrata") }
             }
@@ -37,9 +38,36 @@ Kirigami.ScrollablePage {
         RowLayout {
             Layout.fillWidth: true
             Controls.Button { text: qsTr("Rileggi"); onClicked: KrisBackend.refreshConfigStatus() }
-            Controls.Button { text: qsTr("Controlla GitHub"); enabled: !KrisBackend.busy; onClicked: KrisBackend.fetchConfig() }
             Controls.Button { text: qsTr("Mostra differenze"); enabled: !KrisBackend.busy; onClicked: KrisBackend.showConfigDiff() }
-            Controls.Button { text: qsTr("Sincronizza"); enabled: !KrisBackend.busy; onClicked: KrisBackend.syncConfig() }
+            Item { Layout.fillWidth: true }
+        }
+
+        Kirigami.AbstractCard {
+            Layout.fillWidth: true
+            contentItem: ColumnLayout {
+                Controls.Label { text: qsTr("GitHub — opzionale"); font.bold: true }
+                Controls.Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: KrisBackend.configStatus.upstream
+                        ? qsTr("Remote collegato. La sincronizzazione resta manuale e non applica mai automaticamente una configurazione.")
+                        : qsTr("GitHub non è collegato. Verifica, costruzione e applicazione del sistema continuano a funzionare interamente in locale.")
+                    opacity: 0.78
+                }
+                RowLayout {
+                    Controls.Button {
+                        text: qsTr("Controlla GitHub")
+                        enabled: !KrisBackend.busy && !!KrisBackend.configStatus.upstream
+                        onClicked: KrisBackend.fetchConfig()
+                    }
+                    Controls.Button {
+                        text: qsTr("Sincronizza")
+                        enabled: !KrisBackend.busy && !!KrisBackend.configStatus.upstream
+                        onClicked: KrisBackend.syncConfig()
+                    }
+                    Item { Layout.fillWidth: true }
+                }
+            }
         }
 
         Controls.ScrollView {
