@@ -72,7 +72,9 @@ Hard rules:
 - no automatic conflict resolution;
 - no apply from a dirty checkout;
 - no remote code is activated before Nix evaluation succeeds;
-- build/switch remain separate user-visible actions.
+- in the Config sync/apply workflow, build and switch remain separate user-visible actions;
+- the explicit system-package add/remove path is a deliberate convenience exception: it creates one local managed-config commit and then builds/switches in the same user action, but never performs GitHub synchronization;
+- mutating `kris-configctl` commands are serialized with a per-repository process lock so separate krisNCC windows or terminal invocations cannot modify the same checkout concurrently.
 
 ## Apply path
 
@@ -111,7 +113,7 @@ Applicata    a83c19d     ✓
 [ Valida ] [ Costruisci ] [ Applica ]
 ```
 
-**Sincronizza does not mean Applica.** Downloading, validating, building and activating remain distinct operations.
+**Sincronizza does not mean Applica.** On the Config page, downloading, validating, building and activating remain distinct explicit operations. The system-package action described above is intentionally separate from this sync/apply workflow.
 
 ## Secrets and runtime state
 

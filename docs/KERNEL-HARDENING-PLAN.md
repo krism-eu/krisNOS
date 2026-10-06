@@ -2,6 +2,12 @@
 
 Goal: add conservative desktop hardening without breaking the features that krisNOS actually uses.
 
+## Current implementation status
+
+The current framework applies a small conservative hardening profile by default. It does **not** yet expose a dedicated `krisos.*` enable/disable option or a krisNCC toggle; the section below is explicitly roadmap, not a promise of current UI functionality.
+
+The existing sysctl values are `mkDefault` values, so personal declarative configuration can override individual settings without patching the framework. A future single profile option should be added only together with the corresponding krisNCC control and tests.
+
 ## Compatibility constraints
 
 The hardening profile must preserve:

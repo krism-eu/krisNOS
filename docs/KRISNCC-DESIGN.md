@@ -55,7 +55,9 @@ User software via `nix profile` sits deliberately outside the system rebuild cyc
 - GitHub is optional; no background Git polling or auto-sync;
 - Sync never means Apply;
 - normal app install never triggers a system rebuild;
-- build and apply are separate operations;
+- on the Config page, build and apply remain separate user-visible operations;
+- adding/removing an explicit **system package** is the narrow exception: one user action updates only `krisncc-managed.nix`, validates, creates one local commit, then builds and switches; GitHub synchronization remains separate and manual;
+- mutating `kris-configctl` operations are serialized across GUI instances and terminal invocations with a per-repository process lock;
 - no arbitrary shell execution as root;
 - privileged actions use fixed helpers and validated arguments; on the initial personal host they are invoked through non-interactive `sudo -n`;
 - no hidden krisNCC database becomes a second source of truth;

@@ -90,6 +90,12 @@ void KrisPackageBackend::handleCommandResult(const QString &operation, int exitC
     const QString errorText = QString::fromUtf8(err).trimmed();
 
     if (exitCode != 0) {
+        if (operation == QStringLiteral("system-package-add")
+            || operation == QStringLiteral("system-package-remove")) {
+            refreshSystemPackages();
+            refreshCleanup();
+            emit systemConfigurationChanged();
+        }
         setMessage(errorText.isEmpty()
                        ? tr("Operazione non riuscita (%1).").arg(exitCode)
                        : errorText.left(1600));

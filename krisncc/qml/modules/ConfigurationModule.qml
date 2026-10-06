@@ -4,7 +4,13 @@ import QtQuick.Controls as Controls
 import org.kde.kirigami as Kirigami
 
 Kirigami.ScrollablePage {
+    id: root
     padding: 22
+
+    function globalBusy() {
+        return KrisBackend.busy || DesktopBackend.busy || PackageBackend.busy
+    }
+
     Component.onCompleted: KrisBackend.refreshConfigStatus()
 
     ColumnLayout {
@@ -37,8 +43,8 @@ Kirigami.ScrollablePage {
 
         RowLayout {
             Layout.fillWidth: true
-            Controls.Button { text: qsTr("Rileggi"); onClicked: KrisBackend.refreshConfigStatus() }
-            Controls.Button { text: qsTr("Mostra differenze"); enabled: !KrisBackend.busy; onClicked: KrisBackend.showConfigDiff() }
+            Controls.Button { text: qsTr("Rileggi"); enabled: !root.globalBusy(); onClicked: KrisBackend.refreshConfigStatus() }
+            Controls.Button { text: qsTr("Mostra differenze"); enabled: !root.globalBusy(); onClicked: KrisBackend.showConfigDiff() }
             Item { Layout.fillWidth: true }
         }
 
@@ -57,12 +63,12 @@ Kirigami.ScrollablePage {
                 RowLayout {
                     Controls.Button {
                         text: qsTr("Controlla GitHub")
-                        enabled: !KrisBackend.busy && !!KrisBackend.configStatus.upstream
+                        enabled: !root.globalBusy() && !!KrisBackend.configStatus.upstream
                         onClicked: KrisBackend.fetchConfig()
                     }
                     Controls.Button {
                         text: qsTr("Sincronizza")
-                        enabled: !KrisBackend.busy && !!KrisBackend.configStatus.upstream
+                        enabled: !root.globalBusy() && !!KrisBackend.configStatus.upstream
                         onClicked: KrisBackend.syncConfig()
                     }
                     Item { Layout.fillWidth: true }
@@ -108,11 +114,11 @@ Kirigami.ScrollablePage {
 
         RowLayout {
             Layout.fillWidth: true
-            Controls.Button { text: qsTr("Verifica"); enabled: !KrisBackend.busy; onClicked: KrisBackend.validateConfig() }
-            Controls.Button { text: qsTr("Costruisci"); enabled: !KrisBackend.busy; onClicked: KrisBackend.buildConfig() }
+            Controls.Button { text: qsTr("Verifica"); enabled: !root.globalBusy(); onClicked: KrisBackend.validateConfig() }
+            Controls.Button { text: qsTr("Costruisci"); enabled: !root.globalBusy(); onClicked: KrisBackend.buildConfig() }
             Controls.Button {
                 text: qsTr("Applica")
-                enabled: !KrisBackend.busy
+                enabled: !root.globalBusy()
                 onClicked: KrisBackend.applyConfig()
                 Controls.ToolTip.visible: hovered
                 Controls.ToolTip.text: qsTr("Valida e costruisce da utente; solo l'attivazione finale usa l'helper amministrativo fisso tramite sudo non interattivo.")

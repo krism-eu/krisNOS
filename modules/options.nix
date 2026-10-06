@@ -61,7 +61,7 @@ in
     allowUnfreeSystemPackages = mkOption {
       type = types.bool;
       default = false;
-      description = "Allow unfree nixpkgs packages when explicitly requested for the system layer.";
+      description = "Global persistent permission for explicitly requested unfree system packages; removing a package does not revoke it automatically.";
     };
   };
 }
