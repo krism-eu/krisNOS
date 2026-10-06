@@ -2,6 +2,8 @@ name: Icicle check
 
 on:
   push:
+    branches:
+      - iso
     paths:
       - flake.nix
       - flake.lock
@@ -10,9 +12,10 @@ on:
       - profiles/live.nix
       - profiles/icicle-installer.nix
       - .github/workflows/icicle.yml
+
   pull_request:
     branches:
-      - main
+      - iso
     paths:
       - flake.nix
       - flake.lock
@@ -21,6 +24,7 @@ on:
       - profiles/live.nix
       - profiles/icicle-installer.nix
       - .github/workflows/icicle.yml
+
   workflow_dispatch:
 
 permissions:
