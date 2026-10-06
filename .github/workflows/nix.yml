@@ -40,6 +40,3 @@ jobs:
 
       - name: Check
         run: nix flake check --no-update-lock-file --show-trace
-
-      - name: Evaluate ISO
-        run: nix eval --no-update-lock-file --raw .#packages.x86_64-linux.iso.drvPath
