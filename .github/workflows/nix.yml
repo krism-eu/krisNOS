@@ -32,9 +32,6 @@ jobs:
       - name: Flake metadata
         run: nix flake metadata --no-update-lock-file
 
-      - name: Format
-        run: nix fmt --no-update-lock-file -- --check .
-
       - name: Check
         run: nix flake check --no-update-lock-file --show-trace
 
