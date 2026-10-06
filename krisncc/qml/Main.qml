@@ -14,7 +14,7 @@ Kirigami.ApplicationWindow {
     title: qsTr("krisNCC")
     palette.highlight: Qt.darker(Kirigami.Theme.highlightColor, 1.12)
     property int currentSection: 0
-    readonly property bool globalBusy: KrisBackend.busy || DesktopBackend.busy
+    readonly property bool globalBusy: KrisBackend.busy || DesktopBackend.busy || PackageBackend.busy
     readonly property bool globalCanCancel:
         (KrisBackend.busy && KrisBackend.canCancel)
         || (DesktopBackend.busy && DesktopBackend.canCancel)
@@ -25,7 +25,8 @@ Kirigami.ApplicationWindow {
         { section: 2, label: qsTr("App"), icon: "package-x-generic" },
         { section: 3, label: qsTr("Config"), icon: "settings-configure" },
         { section: 4, label: qsTr("Ripristino"), icon: "edit-undo" },
-        { section: 5, label: qsTr("Strumenti"), icon: "tools-wizard" }
+        { section: 5, label: qsTr("Strumenti"), icon: "tools-wizard" },
+        { section: 6, label: qsTr("Pulizia"), icon: "edit-clear-history" }
     ]
 
     function showIndex(index) {
@@ -230,6 +231,12 @@ Kirigami.ApplicationWindow {
                         active: root.currentSection === 5
                         sourceComponent: Component { ToolsModule {} }
                     }
+                    Loader {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        active: root.currentSection === 6
+                        sourceComponent: Component { CleanupModule {} }
+                    }
                 }
 
                 Kirigami.InlineMessage {
@@ -237,9 +244,12 @@ Kirigami.ApplicationWindow {
                     Layout.margins: Kirigami.Units.smallSpacing
                     visible: KrisBackend.lastMessage.length > 0
                           || DesktopBackend.lastMessage.length > 0
+                          || PackageBackend.lastMessage.length > 0
                     text: DesktopBackend.lastMessage.length > 0
                         ? DesktopBackend.lastMessage
-                        : KrisBackend.lastMessage
+                        : PackageBackend.lastMessage.length > 0
+                          ? PackageBackend.lastMessage
+                          : KrisBackend.lastMessage
                     type: Kirigami.MessageType.Information
                 }
             }

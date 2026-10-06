@@ -15,6 +15,8 @@ qt_add_executable(krisNCC
     src/KrisNccBackend.h
     src/KrisDesktopBackend.cpp
     src/KrisDesktopBackend.h
+    src/KrisPackageBackend.cpp
+    src/KrisPackageBackend.h
 )
 
 set_source_files_properties(qml/components/UiMetrics.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
@@ -26,6 +28,7 @@ set(KRISNCC_QML_FILES
     qml/modules/SoftwareModule.qml
     qml/modules/ConfigurationModule.qml
     qml/modules/RecoveryModule.qml
+    qml/modules/CleanupModule.qml
     qml/modules/ToolsModule.qml
 )
 foreach(qml_file IN LISTS KRISNCC_QML_FILES)

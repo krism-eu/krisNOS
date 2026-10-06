@@ -7,11 +7,27 @@ Kirigami.ScrollablePage {
     id: root
     padding: 22
 
+    property string pendingSystemAttribute: ""
+    property string pendingSystemName: ""
+    property bool pendingSystemUnfree: false
+    property string pendingRemoveSystemAttribute: ""
+
     function globalBusy() {
-        return KrisBackend.busy || DesktopBackend.busy
+        return KrisBackend.busy || DesktopBackend.busy || PackageBackend.busy
     }
 
-    Component.onCompleted: KrisBackend.refreshSoftware()
+    function isSystemPackage(attribute) {
+        for (let i = 0; i < PackageBackend.systemPackages.length; ++i) {
+            if (PackageBackend.systemPackages[i] === attribute)
+                return true
+        }
+        return false
+    }
+
+    Component.onCompleted: {
+        KrisBackend.refreshSoftware()
+        PackageBackend.refreshSystemPackages()
+    }
 
     ColumnLayout {
         width: parent.width
@@ -25,7 +41,7 @@ Kirigami.ScrollablePage {
         Controls.Label {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            text: qsTr("Le app installate da krisNCC vivono nel profilo Nix. Flatpak resta a Discover; Distrobox resta l'ambiente Linux separato.")
+            text: qsTr("La stessa ricerca Nix permette di provare un'app, installarla nel tuo profilo oppure renderla parte del sistema con una nuova generazione NixOS. Flatpak resta disponibile tramite Discover; Distrobox resta separato.")
             opacity: 0.78
         }
 
@@ -75,7 +91,7 @@ Kirigami.ScrollablePage {
                 Controls.Label {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: qsTr("Installa aggiunge l'app al tuo profilo senza rebuild. Prova usa nix run e non installa nulla.")
+                    text: qsTr("Prova usa nix run e non installa. Installa usa il profilo Nix dell'utente senza rebuild. Sistema registra il pacchetto nella configurazione gestita da krisNCC, valida, costruisce e fa lo switch a una nuova generazione.")
                     opacity: 0.72
                 }
 
@@ -109,12 +125,22 @@ Kirigami.ScrollablePage {
                                 enabled: !root.globalBusy()
                                 onClicked: KrisBackend.addSoftware(modelData.attribute, allowUnfree.checked)
                             }
+                            Controls.Button {
+                                text: root.isSystemPackage(modelData.attribute) ? qsTr("Nel sistema") : qsTr("Sistema")
+                                enabled: !root.globalBusy() && !root.isSystemPackage(modelData.attribute)
+                                onClicked: {
+                                    root.pendingSystemAttribute = modelData.attribute
+                                    root.pendingSystemName = modelData.name || modelData.attribute
+                                    root.pendingSystemUnfree = allowUnfree.checked
+                                    systemInstallDialog.open()
+                                }
+                            }
                         }
                     }
                 }
 
                 Controls.Label {
-                    text: qsTr("Installate con Nix (%1)").arg(KrisBackend.softwareItems.length)
+                    text: qsTr("Installate nel profilo Nix (%1)").arg(KrisBackend.softwareItems.length)
                     font.bold: true
                 }
 
@@ -133,6 +159,38 @@ Kirigami.ScrollablePage {
                                 text: qsTr("Rimuovi")
                                 enabled: !root.globalBusy()
                                 onClicked: KrisBackend.removeSoftware(modelData.name)
+                            }
+                        }
+                    }
+                }
+
+                Controls.Label {
+                    text: qsTr("Installate nel sistema (%1)").arg(PackageBackend.systemPackages.length)
+                    font.bold: true
+                }
+
+                Repeater {
+                    model: PackageBackend.systemPackages
+                    delegate: Kirigami.AbstractCard {
+                        required property string modelData
+                        Layout.fillWidth: true
+                        contentItem: RowLayout {
+                            Controls.Label {
+                                Layout.fillWidth: true
+                                text: modelData
+                                font.bold: true
+                            }
+                            Controls.Label {
+                                text: qsTr("generazione NixOS")
+                                opacity: 0.68
+                            }
+                            Controls.Button {
+                                text: qsTr("Rimuovi dal sistema")
+                                enabled: !root.globalBusy()
+                                onClicked: {
+                                    root.pendingRemoveSystemAttribute = modelData
+                                    systemRemoveDialog.open()
+                                }
                             }
                         }
                     }
@@ -190,6 +248,35 @@ Kirigami.ScrollablePage {
                     text: qsTr("Nessun container Distrobox rilevato.")
                 }
             }
+        }
+    }
+
+    Controls.Dialog {
+        id: systemInstallDialog
+        modal: true
+        width: Math.min(560, root.width - 60)
+        title: qsTr("Installa nel sistema")
+        standardButtons: Controls.Dialog.Ok | Controls.Dialog.Cancel
+        onAccepted: PackageBackend.installSystemPackage(root.pendingSystemAttribute,
+                                                        root.pendingSystemUnfree)
+        contentItem: Controls.Label {
+            width: 500
+            wrapMode: Text.WordWrap
+            text: qsTr("%1 verrà aggiunto alla configurazione gestita da krisNCC. Verranno eseguiti validazione, build e switch; sarà creata una nuova generazione NixOS rollbackabile. La sincronizzazione GitHub non viene eseguita automaticamente.").arg(root.pendingSystemName)
+        }
+    }
+
+    Controls.Dialog {
+        id: systemRemoveDialog
+        modal: true
+        width: Math.min(560, root.width - 60)
+        title: qsTr("Rimuovi dal sistema")
+        standardButtons: Controls.Dialog.Ok | Controls.Dialog.Cancel
+        onAccepted: PackageBackend.removeSystemPackage(root.pendingRemoveSystemAttribute)
+        contentItem: Controls.Label {
+            width: 500
+            wrapMode: Text.WordWrap
+            text: qsTr("%1 verrà rimosso dalla configurazione gestita da krisNCC. Verranno eseguiti validazione, build e switch a una nuova generazione; la generazione precedente resta disponibile per il rollback finché non viene pulita.").arg(root.pendingRemoveSystemAttribute)
         }
     }
 }

@@ -6,6 +6,7 @@
 
 #include "KrisDesktopBackend.h"
 #include "KrisNccBackend.h"
+#include "KrisPackageBackend.h"
 
 int main(int argc, char *argv[])
 {
@@ -20,15 +21,21 @@ int main(int argc, char *argv[])
 
     KrisNccBackend backend;
     KrisDesktopBackend desktopBackend;
+    KrisPackageBackend packageBackend;
 
     QObject::connect(&desktopBackend, &KrisDesktopBackend::recoveryRefreshRequested,
                      &backend, &KrisNccBackend::refreshRecovery);
     QObject::connect(&desktopBackend, &KrisDesktopBackend::recoveryRefreshRequested,
                      &backend, &KrisNccBackend::refreshConfigStatus);
+    QObject::connect(&packageBackend, &KrisPackageBackend::systemConfigurationChanged,
+                     &backend, &KrisNccBackend::refreshConfigStatus);
+    QObject::connect(&packageBackend, &KrisPackageBackend::systemConfigurationChanged,
+                     &backend, &KrisNccBackend::refreshRecovery);
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("KrisBackend"), &backend);
     engine.rootContext()->setContextProperty(QStringLiteral("DesktopBackend"), &desktopBackend);
+    engine.rootContext()->setContextProperty(QStringLiteral("PackageBackend"), &packageBackend);
 
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
                      &app, [] { QCoreApplication::exit(-1); }, Qt::QueuedConnection);

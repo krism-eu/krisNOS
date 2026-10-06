@@ -51,5 +51,17 @@ in
       default = 5;
       description = "Maximum number of systemd-boot generations exposed on the ESP.";
     };
+
+    extraSystemPackages = mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+      description = "nixpkgs attribute paths managed by krisNCC as system packages.";
+    };
+
+    allowUnfreeSystemPackages = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Allow unfree nixpkgs packages when explicitly requested for the system layer.";
+    };
   };
 }

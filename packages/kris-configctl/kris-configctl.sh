@@ -22,6 +22,9 @@ STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/krisos"
 STATE_FILE="$STATE_DIR/config-sync.state"
 PENDING_LINK="$STATE_DIR/pending-system"
 SUDO=/run/wrappers/bin/sudo
+MANAGED_REL=modules/krisncc-managed.nix
+PACKAGES_BEGIN='# krisNCC system packages: begin'
+PACKAGES_END='# krisNCC system packages: end'
 
 usage() {
   cat <<'USAGE'
@@ -36,6 +39,13 @@ Usage:
   kris-configctl validate
   kris-configctl build
   kris-configctl apply
+  kris-configctl system-packages [--json]
+  kris-configctl system-package-add [--unfree] <nixpkgs-attribute>
+  kris-configctl system-package-remove <nixpkgs-attribute>
+  kris-configctl cleanup-status [--json]
+  kris-configctl cleanup-profile
+  kris-configctl cleanup-system
+  kris-configctl cleanup-store
 
 Internal krisNCC commands:
   kris-configctl prepare-apply --json
@@ -56,7 +66,10 @@ Safety rules:
 - pull is fast-forward only;
 - validate/build/apply refuse lock-file updates;
 - build validates first and does not need root;
-- apply is separate and validates before switching.
+- system package changes touch only krisncc-managed.nix, validate, create one
+  local commit, then build and switch; GitHub sync remains separate/manual;
+- cleanup is always explicit: app-profile history older than 30 days, system
+  generations beyond the last 5, and unreachable store paths are separate actions.
 USAGE
 }
 
@@ -328,9 +341,6 @@ record_applied() {
   [ -n "$toplevel" ] && [ "$current" = "$toplevel" ] \
     || die "il sistema corrente non coincide con il toplevel appena applicato"
 
-  # Dopo uno switch riuscito /run/current-system e' la prova autorevole.
-  # Il repo puo' essere cambiato nel frattempo: segnaliamolo senza perdere
-  # la provenienza del toplevel che e' stato realmente attivato.
   if [ -d "$REPO/.git" ]; then
     current_head="$(head_sha 2>/dev/null || true)"
     dirty="$(dirty_flag 2>/dev/null || true)"
@@ -376,6 +386,192 @@ apply_config() (
   printf 'Applicata configurazione commit %s\n' "$commit"
 )
 
+valid_system_attr() {
+  case "$1" in
+    (*[!A-Za-z0-9._+@-]*|'') return 1 ;;
+    (-*|.*|*..*|*.) return 1 ;;
+    (*) return 0 ;;
+  esac
+}
+
+managed_file() {
+  printf '%s/%s\n' "$REPO" "$MANAGED_REL"
+}
+
+check_managed_markers() {
+  local file
+  file="$(managed_file)"
+  [ -f "$file" ] || die "$MANAGED_REL mancante"
+  tracked_file "$MANAGED_REL" || die "$MANAGED_REL non è tracciato da Git"
+  [ "$(grep -Fc "$PACKAGES_BEGIN" "$file")" -eq 1 ] \
+    || die "marcatore iniziale pacchetti krisNCC mancante o duplicato"
+  [ "$(grep -Fc "$PACKAGES_END" "$file")" -eq 1 ] \
+    || die "marcatore finale pacchetti krisNCC mancante o duplicato"
+}
+
+managed_package_lines() {
+  local file
+  file="$(managed_file)"
+  check_managed_markers
+  awk -v begin="$PACKAGES_BEGIN" -v end="$PACKAGES_END" '
+    index($0, begin) { inside=1; next }
+    index($0, end) { inside=0; next }
+    inside {
+      line=$0
+      sub(/^[[:space:]]*"/, "", line)
+      sub(/"[[:space:]]*$/, "", line)
+      if (line != $0 && line != "") print line
+    }
+  ' "$file"
+}
+
+system_packages_json() {
+  need jq
+  managed_package_lines | jq -Rsc 'split("\n") | map(select(length > 0))'
+}
+
+rewrite_managed_packages() {
+  local action="$1" attr="$2" allow_unfree="$3"
+  local file list tmp next
+  file="$(managed_file)"
+  check_managed_markers
+  list="$(mktemp)"
+  tmp="$(mktemp)"
+  next="$(mktemp)"
+
+  managed_package_lines > "$list"
+  case "$action" in
+    add)
+      if grep -Fxq -- "$attr" "$list"; then
+        rm -f -- "$list" "$tmp" "$next"
+        return 3
+      fi
+      printf '%s\n' "$attr" >> "$list"
+      sort -u -o "$list" "$list"
+      ;;
+    remove)
+      if ! grep -Fxq -- "$attr" "$list"; then
+        rm -f -- "$list" "$tmp" "$next"
+        return 4
+      fi
+      grep -Fxv -- "$attr" "$list" > "$next" || true
+      mv -- "$next" "$list"
+      ;;
+    *)
+      rm -f -- "$list" "$tmp" "$next"
+      die "azione pacchetto sistema non valida"
+      ;;
+  esac
+
+  awk -v begin="$PACKAGES_BEGIN" -v end="$PACKAGES_END" -v list="$list" '
+    index($0, begin) {
+      print
+      while ((getline package < list) > 0)
+        print "    \"" package "\""
+      close(list)
+      inside=1
+      next
+    }
+    index($0, end) { inside=0; print; next }
+    !inside { print }
+  ' "$file" > "$tmp"
+  mv -- "$tmp" "$file"
+
+  if [ "$allow_unfree" = 1 ]; then
+    if grep -Fqx '  krisos.allowUnfreeSystemPackages = false;' "$file"; then
+      sed -i 's/^  krisos\.allowUnfreeSystemPackages = false;$/  krisos.allowUnfreeSystemPackages = true;/' "$file"
+    elif ! grep -Fqx '  krisos.allowUnfreeSystemPackages = true;' "$file"; then
+      rm -f -- "$list" "$next"
+      die "opzione allowUnfreeSystemPackages mancante nel file gestito"
+    fi
+  fi
+
+  rm -f -- "$list" "$next"
+}
+
+managed_system_package_apply() (
+  local action="$1" attr="$2" allow_unfree="$3" result committed=0 verb
+  need git
+  repo_ok
+  require_clean
+  flake_preflight
+  valid_system_attr "$attr" || die "attributo nixpkgs non valido: $attr"
+  check_managed_markers
+
+  trap 'if [ "$committed" -eq 0 ]; then gitc restore --staged -- "$MANAGED_REL" >/dev/null 2>&1 || true; gitc restore -- "$MANAGED_REL" >/dev/null 2>&1 || true; fi' EXIT
+
+  set +e
+  rewrite_managed_packages "$action" "$attr" "$allow_unfree"
+  result=$?
+  set -e
+  if [ "$result" -eq 3 ]; then
+    printf 'Il pacchetto %s è già nel sistema.\n' "$attr"
+    exit 0
+  fi
+  if [ "$result" -eq 4 ]; then
+    printf 'Il pacchetto %s non è presente nel sistema.\n' "$attr"
+    exit 0
+  fi
+  [ "$result" -eq 0 ] || exit "$result"
+
+  gitc diff --check -- "$MANAGED_REL"
+  validate_config_raw
+  gitc add -- "$MANAGED_REL"
+
+  if [ "$action" = add ]; then verb=add; else verb=remove; fi
+  gitc \
+    -c user.name='krisNCC' \
+    -c user.email='krisncc@localhost' \
+    -c commit.gpgSign=false \
+    commit -m "krisNCC: $verb system package $attr" -- "$MANAGED_REL" >/dev/null
+  committed=1
+
+  printf 'Configurazione aggiornata localmente per %s; build e switch in corso.\n' "$attr"
+  apply_config
+)
+
+cleanup_status_json() {
+  local system_generations profile_generations used_kib free_kib
+  need jq
+  need nix-env
+  need nix
+  system_generations="$(nix-env --list-generations --profile /nix/var/nix/profiles/system 2>/dev/null | awk 'NF { n++ } END { print n + 0 }')"
+  profile_generations="$(nix profile history 2>/dev/null | awk '/^Version[[:space:]]+[0-9]+/ { n++ } END { print n + 0 }')"
+  read -r used_kib free_kib < <(df -Pk /nix | awk 'NR == 2 { print $3, $4 }')
+  used_kib="${used_kib:-0}"
+  free_kib="${free_kib:-0}"
+  jq -cn \
+    --argjson systemGenerations "$system_generations" \
+    --argjson profileGenerations "$profile_generations" \
+    --argjson storeUsedMiB "$((used_kib / 1024))" \
+    --argjson storeFreeMiB "$((free_kib / 1024))" \
+    '{schema:1,systemGenerations:$systemGenerations,profileGenerations:$profileGenerations,storeUsedMiB:$storeUsedMiB,storeFreeMiB:$storeFreeMiB}'
+}
+
+cleanup_profile() {
+  need nix
+  nix profile wipe-history --older-than 30d
+  printf 'Cronologia del profilo app più vecchia di 30 giorni rimossa.\n'
+}
+
+cleanup_system() {
+  local nix_env
+  need nix-env
+  [ -x "$SUDO" ] || die "wrapper sudo NixOS non disponibile: $SUDO"
+  nix_env="$(command -v nix-env)"
+  "$SUDO" -n -- "$nix_env" --profile /nix/var/nix/profiles/system --delete-generations +5
+  printf 'Generazioni di sistema ridotte mantenendo le ultime 5 rispetto alla generazione corrente.\n'
+}
+
+cleanup_store() {
+  local nix_store
+  need nix-store
+  [ -x "$SUDO" ] || die "wrapper sudo NixOS non disponibile: $SUDO"
+  nix_store="$(command -v nix-store)"
+  "$SUDO" -n -- "$nix_store" --gc
+  printf 'Garbage collection completata: rimossi solo path dello store non più raggiungibili.\n'
+}
+
 cmd="${1:-}"
 case "$cmd" in
   init)
@@ -409,6 +605,29 @@ case "$cmd" in
     record_applied "$2" "$3"
     ;;
   apply) [ "$#" -eq 1 ] || { usage >&2; exit 2; }; need git; repo_ok; apply_config ;;
+  system-packages)
+    [ "$#" -le 2 ] || { usage >&2; exit 2; }
+    need git; repo_ok
+    if [ "${2:-}" = --json ]; then system_packages_json; else managed_package_lines; fi
+    ;;
+  system-package-add)
+    shift
+    allow_unfree=0
+    if [ "${1:-}" = --unfree ]; then allow_unfree=1; shift; fi
+    [ "$#" -eq 1 ] || { usage >&2; exit 2; }
+    managed_system_package_apply add "$1" "$allow_unfree"
+    ;;
+  system-package-remove)
+    [ "$#" -eq 2 ] || { usage >&2; exit 2; }
+    managed_system_package_apply remove "$2" 0
+    ;;
+  cleanup-status)
+    [ "$#" -le 2 ] || { usage >&2; exit 2; }
+    if [ "${2:-}" = --json ]; then cleanup_status_json; else cleanup_status_json | jq .; fi
+    ;;
+  cleanup-profile) [ "$#" -eq 1 ] || { usage >&2; exit 2; }; cleanup_profile ;;
+  cleanup-system) [ "$#" -eq 1 ] || { usage >&2; exit 2; }; cleanup_system ;;
+  cleanup-store) [ "$#" -eq 1 ] || { usage >&2; exit 2; }; cleanup_store ;;
   -h|--help|help|'') usage ;;
   *) usage >&2; exit 2 ;;
 esac
