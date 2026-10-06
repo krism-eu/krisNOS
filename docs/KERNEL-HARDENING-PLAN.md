@@ -6,7 +6,7 @@ Goal: add conservative desktop hardening without breaking the features that kris
 
 The current framework applies a small conservative hardening profile by default. It does **not** yet expose a dedicated `krisos.*` enable/disable option or a krisNCC toggle; the section below is explicitly roadmap, not a promise of current UI functionality.
 
-The existing sysctl values are `mkDefault` values, so personal declarative configuration can override individual settings without patching the framework. A future single profile option should be added only together with the corresponding krisNCC control and tests.
+The existing sysctl values use low-priority `mkOverride 900` definitions. This lets the framework override conflicting NixOS `mkDefault` values while ordinary personal declarative configuration can still override individual settings without patching the framework. A future single profile option should be added only together with the corresponding krisNCC control and tests.
 
 ## Compatibility constraints
 
